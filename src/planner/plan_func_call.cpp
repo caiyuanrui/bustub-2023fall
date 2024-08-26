@@ -1,5 +1,7 @@
 #include <memory>
+#include <string>
 #include <tuple>
+#include <unordered_map>
 #include "binder/bound_expression.h"
 #include "binder/bound_statement.h"
 #include "binder/expressions/bound_agg_call.h"
@@ -39,7 +41,29 @@ auto Planner::GetFuncCallFromFactory(const std::string &func_name, std::vector<A
   // 1. check if the parsed function name is "lower" or "upper".
   // 2. verify the number of args (should be 1), refer to the test cases for when you should throw an `Exception`.
   // 3. return a `StringExpression` std::shared_ptr.
-  throw Exception(fmt::format("func call {} not supported in planner yet", func_name));
+  // throw Exception(fmt::format("func call {} not supported in planner yet", func_name));
+  static const std::unordered_map<std::string, StringExpressionType> mapping = {
+      {"upper", StringExpressionType::Upper},
+      {"lower", StringExpressionType::Lower},
+  };
+
+  auto it = mapping.find(func_name);
+  if (it == mapping.end()) {
+    throw Exception("Invalid function name");
+  }
+
+  switch (it->second) {
+    case StringExpressionType::Upper:
+      if (args.size() != 1) {
+        throw Exception("Number of args in upper function should be 1");
+      }
+      return std::make_shared<StringExpression>(args[0], StringExpressionType::Upper);
+    case StringExpressionType::Lower:
+      if (args.size() != 1) {
+        throw Exception("Number of args in lower function should be 1");
+      }
+      return std::make_shared<StringExpression>(args[0], StringExpressionType::Lower);
+  }
 }
 
 }  // namespace bustub

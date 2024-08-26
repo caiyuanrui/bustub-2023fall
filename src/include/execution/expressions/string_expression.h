@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <iterator>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "common/exception.h"
 #include "common/macros.h"
 #include "execution/expressions/abstract_expression.h"
+#include "fmt/core.h"
 #include "fmt/format.h"
 #include "storage/table/tuple.h"
 #include "type/type.h"
@@ -46,7 +48,16 @@ class StringExpression : public AbstractExpression {
 
   auto Compute(const std::string &val) const -> std::string {
     // TODO(student): implement upper / lower.
-    return {};
+    std::string result = val;
+    switch (expr_type_) {
+      case StringExpressionType::Upper:
+        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::toupper(c); });
+        break;
+      case StringExpressionType::Lower:
+        std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) { return std::tolower(c); });
+        break;
+    }
+    return result;
   }
 
   auto Evaluate(const Tuple *tuple, const Schema &schema) const -> Value override {
