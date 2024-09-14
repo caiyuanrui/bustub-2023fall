@@ -14,12 +14,7 @@ fi
 
 cmake -DCMAKE_BUILD_TYPE=Debug -DBUSTUB_SANITIZER= ..
 
-# Formatting
-make format
-make check-clang-tidy-p0
-
 make -j"$(nproc)"
 
 # Testing
-make trie_test trie_store_test -j"$(nproc)"
-make trie_noncopy_test trie_store_noncopy_test -j"$(nproc)"
+make lru_k_replacer_test buffer_pool_manager_test -j"$(nproc)"
