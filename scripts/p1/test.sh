@@ -9,6 +9,8 @@ echo "$ROOT_PATH" && cd "$ROOT_PATH" || exit
 
 cd build || exit
 
-make lru_k_replacer_test -j"$(nproc)"
+# make lru_k_replacer_test -j"$(nproc)"
+make disk_scheduler_test -j"$(nproc)"
 
-./test/lru_k_replacer_test
+# ./test/lru_k_replacer_test
+./test/disk_scheduler_test
