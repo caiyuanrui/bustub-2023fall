@@ -4,14 +4,10 @@
 
 #include "buffer/lru_k_replacer.h"
 
-#include <algorithm>
-#include <cstdio>
-#include <memory>
-#include <random>
-#include <set>
+#include <iostream>
 #include <thread>  // NOLINT
-#include <vector>
 
+#include "common/exception.h"
 #include "gtest/gtest.h"
 
 namespace bustub {
@@ -95,4 +91,32 @@ TEST(LRUKReplacerTest, SampleTest) {
   ASSERT_EQ(false, lru_replacer.Evict(&value));
   ASSERT_EQ(0, lru_replacer.Size());
 }
+
+TEST(LRUKReplacerTest, MyTest) {
+  try {
+    LRUKReplacer lru_replacer(3, 2);
+
+    auto t1 = std::thread([&lru_replacer] {
+      lru_replacer.RecordAccess(1);
+      lru_replacer.RecordAccess(2);
+      lru_replacer.SetEvictable(1, true);
+      lru_replacer.SetEvictable(2, true);
+    });
+
+    auto t2 = std::thread([&lru_replacer] {
+      lru_replacer.RecordAccess(3);
+      lru_replacer.RecordAccess(3);
+      lru_replacer.SetEvictable(3, true);
+      // lru_replacer.RecordAccess(4);
+      // lru_replacer.SetEvictable(4, true);
+    });
+
+    t1.join();
+    t2.join();
+    ASSERT_EQ(lru_replacer.Size(), 3);
+  } catch (ExceptionType e) {
+    std::cerr << "Error occurs: " << Exception::ExceptionTypeToString(e) << std::endl;
+  }
+}
+
 }  // namespace bustub

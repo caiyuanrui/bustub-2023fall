@@ -12,12 +12,11 @@
 
 #pragma once
 
-#include <chrono>
-#include <limits>
+#include <cstddef>
 #include <list>
+#include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
-#include <vector>
 
 #include "common/config.h"
 #include "common/macros.h"
@@ -26,15 +25,14 @@ namespace bustub {
 
 enum class AccessType { Unknown = 0, Lookup, Scan, Index };
 
-class LRUKNode {
- public:
-  /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
-  // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
-
+struct LRUKNode {
   std::list<size_t> history_;
-  size_t k_;
-  frame_id_t fid_;
+  std::shared_ptr<LRUKNode> prev{nullptr}, next{nullptr};
+  frame_id_t fid_{-1};
   bool is_evictable_{false};
+
+  LRUKNode() = default;
+  LRUKNode(size_t ts, frame_id_t fid);
 };
 
 /**
@@ -149,19 +147,21 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
-  size_t UpdateTimestamp() {
-    auto now = std::chrono::steady_clock::now();
-    current_timestamp_ = now.time_since_epoch().count();
-    return current_timestamp_;
-  }
-
-  auto IsFull() -> bool { return curr_size_ >= replacer_size_; }
-  auto evict_(frame_id_t *frame_id) -> bool;
+  auto evit_(frame_id_t *frame_id) -> bool;
+  auto getTimeStamp() -> size_t;
+  auto cmp(std::shared_ptr<LRUKNode> n1, std::shared_ptr<LRUKNode> n2) -> bool;
+  auto move_forward(std::shared_ptr<LRUKNode> n) -> void;
+  auto move_backward(std::shared_ptr<LRUKNode> n) -> void;
+  auto detach(std::shared_ptr<LRUKNode> n) -> void;
 
  private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
-  std::unordered_map<frame_id_t, LRUKNode> node_store_;
+  // std::unordered_map<frame_id_t, LRUKNode *> node_store_;
+  // std::unordered_map<frame_id_t, LRUKNode *> node_store_;
+  // HashLinkedList node_store_;
+  std::unordered_map<frame_id_t, std::shared_ptr<LRUKNode>> map_;
+  std::shared_ptr<LRUKNode> head_, tail_;
   size_t current_timestamp_{0};
   size_t curr_size_{0};
   size_t replacer_size_;

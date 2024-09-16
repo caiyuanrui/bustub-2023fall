@@ -13,142 +13,174 @@
 #include "buffer/lru_k_replacer.h"
 #include <chrono>
 #include <cstddef>
-#include <limits>
-#include <list>
+#include <memory>
 #include <mutex>
 #include "common/config.h"
 #include "common/exception.h"
 
 namespace bustub {
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
+LRUKNode::LRUKNode(size_t ts, frame_id_t fid) : history_{ts}, fid_(fid) {}
 
-auto LRUKReplacer::evict_(frame_id_t *frame_id) -> bool {
-  UpdateTimestamp();
-
-  if (node_store_.empty()) {
-    return false;
-  }
-
-  size_t max_distance = 0;
-  frame_id_t candidate_frame = -1;
-  bool has_inf = false;
-
-  for (auto &pair : node_store_) {
-    const auto &node = pair.second;
-    const size_t fid = pair.first;
-
-    if (!node.is_evictable_) {
-      continue;
-    }
-
-    size_t k_distance = std::numeric_limits<size_t>::max();
-
-    if (node.history_.size() >= k_) {
-      k_distance = current_timestamp_ - node.history_.front();
-    }
-
-    if (k_distance == std::numeric_limits<size_t>::max()) {
-      if (has_inf) {
-        if (node_store_[candidate_frame].history_.front() > node.history_.front()) {
-          candidate_frame = fid;
-        }
-      } else {
-        has_inf = true;
-        max_distance = k_distance;
-        candidate_frame = fid;
-      }
-    } else if (k_distance > max_distance) {
-      max_distance = k_distance;
-      candidate_frame = fid;
-    }
-  }
-
-  if (candidate_frame == -1) {
-    return false;
-  }
-
-  *frame_id = candidate_frame;
-  node_store_.erase(candidate_frame);
-  curr_size_--;
-  return true;
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k)
+    : head_(std::make_shared<LRUKNode>()), tail_(std::make_shared<LRUKNode>()), replacer_size_(num_frames), k_(k) {
+  head_->next = tail_;
+  tail_->prev = head_;
 }
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::lock_guard guard(latch_);
-  return evict_(frame_id);
+  return evit_(frame_id);
+}
+
+auto LRUKReplacer::evit_(frame_id_t *frame_id) -> bool {
+  if (curr_size_ == 0) {
+    *frame_id = -1;
+    return false;
+  }
+
+  for (auto it = head_->next; it != tail_; it = it->next) {
+    if (it->is_evictable_) {
+      *frame_id = it->fid_;
+      curr_size_--;
+      detach(it);
+      map_.erase(map_.find(it->fid_));
+      return true;
+    }
+  }
+
+  *frame_id = -1;
+  return false;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   std::lock_guard guard(latch_);
 
-  UpdateTimestamp();
+  current_timestamp_ = getTimeStamp();
 
-  if (static_cast<size_t>(frame_id) > replacer_size_) {
-    throw ExceptionType::OUT_OF_RANGE;
+  if (frame_id < 0 || static_cast<size_t>(frame_id) > replacer_size_) {
+    throw ExceptionType::INVALID;
   }
 
-  auto now = std::chrono::steady_clock::now();
-  current_timestamp_ = now.time_since_epoch().count();
+  auto it = map_.find(frame_id);
 
-  auto itr = node_store_.find(frame_id);
-
-  if (itr != node_store_.end()) {
-    auto &node = itr->second;
-    if (node.history_.size() >= node.k_) {
-      node.history_.pop_front();
+  if (it != map_.end()) {
+    if (it->second->history_.size() >= k_) {
+      it->second->history_.pop_front();
     }
-    node.history_.push_back(current_timestamp_);
+    it->second->history_.push_back(current_timestamp_);
+    move_backward(it->second);
   } else {
-    auto new_frame = LRUKNode{std::list<size_t>{current_timestamp_}, k_, frame_id, false};
-
-    if (IsFull()) {
-      frame_id_t *evict_frame_id = nullptr;
-      if (!evict_(evict_frame_id)) {  // maybe? dead lock
-        throw ExceptionType::OUT_OF_MEMORY;
-      }
-    }
-    node_store_.emplace(frame_id, std::move(new_frame));
+    auto new_node = std::make_shared<LRUKNode>(current_timestamp_, frame_id);
+    map_.insert({frame_id, new_node});
+    new_node->prev = tail_->prev;
+    new_node->next = tail_;
+    tail_->prev->next = new_node;
+    tail_->prev = new_node;
+    move_forward(new_node);
   }
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   std::lock_guard guard(latch_);
 
-  if (static_cast<size_t>(frame_id) > replacer_size_) {
-    throw ExceptionType::OUT_OF_RANGE;
-  }
-  auto itr = node_store_.find(frame_id);
-  if (itr != node_store_.end()) {
-    auto &node = itr->second;
-    if (node.is_evictable_ == false && set_evictable == true) {
-      curr_size_++;
-      node.is_evictable_ = set_evictable;
-    }
-    if (node.is_evictable_ == true && set_evictable == false) {
+  auto it = map_.find(frame_id);
+
+  if (it != map_.end()) {
+    if (it->second->is_evictable_ && !set_evictable) {
       curr_size_--;
-      node.is_evictable_ = set_evictable;
+
+    } else if (!it->second->is_evictable_ && set_evictable) {
+      if (curr_size_ >= replacer_size_) {
+        auto frame_id = std::make_shared<frame_id_t>(-1);
+
+        if (!Evict(frame_id.get())) {
+          throw ExceptionType::UNKNOWN_TYPE;
+        };
+
+      } else {
+        curr_size_++;
+      }
     }
+
+    it->second->is_evictable_ = set_evictable;
   }
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::lock_guard guard(latch_);
 
-  if (static_cast<size_t>(frame_id) > replacer_size_) {
-    throw ExceptionType::OUT_OF_RANGE;
+  auto it = map_.find(frame_id);
+
+  if (it != map_.end()) {
+    if (it->second->is_evictable_) {
+      curr_size_--;
+    }
+    detach(it->second);
+    map_.erase(it);
   }
-
-  auto itr = node_store_.find(frame_id);
-
-  if (itr == node_store_.end() || itr->second.is_evictable_ == false) {
-    throw ExceptionType::INVALID;
-  }
-
-  node_store_.erase(itr);
-  curr_size_--;
 }
 
 auto LRUKReplacer::Size() -> size_t { return curr_size_; }
+
+auto LRUKReplacer::getTimeStamp() -> size_t { return std::chrono::steady_clock::now().time_since_epoch().count(); }
+
+auto LRUKReplacer::cmp(std::shared_ptr<LRUKNode> n1, std::shared_ptr<LRUKNode> n2) -> bool {
+  auto k1 = n1->history_.size() == k_;
+  auto k2 = n2->history_.size() == k_;
+
+  if (k1 == k2) {
+    return n1->history_.front() < n2->history_.front();
+  } else {
+    return k2;
+  }
+}
+
+auto LRUKReplacer::move_forward(std::shared_ptr<LRUKNode> n) -> void {
+  auto p = n->prev;
+
+  while (true) {
+    if (cmp(p, n) || p == head_) {
+      break;
+    }
+    p = p->prev;
+  }
+
+  if (p->next == n) {
+    return;
+  }
+
+  detach(n);
+  n->prev = p;
+  n->next = p->next;
+  p->next->prev = n;
+  p->next = n;
+}
+
+auto LRUKReplacer::move_backward(std::shared_ptr<LRUKNode> n) -> void {
+  auto p = n->next;
+
+  while (true) {
+    if (cmp(n, p) || p == tail_) {
+      break;
+    }
+    p = p->next;
+  }
+
+  if (n->next == p) {
+    return;
+  }
+
+  detach(n);
+  n->next = p;
+  n->prev = p->prev;
+  p->prev->next = n;
+  p->prev = n;
+}
+
+auto LRUKReplacer::detach(std::shared_ptr<LRUKNode> n) -> void {
+  n->prev->next = n->next;
+  n->next->prev = n->prev;
+}
 
 }  // namespace bustub
