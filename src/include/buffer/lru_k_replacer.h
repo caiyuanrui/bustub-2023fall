@@ -27,7 +27,7 @@ enum class AccessType { Unknown = 0, Lookup, Scan, Index };
 
 struct LRUKNode {
   std::list<size_t> history_;
-  std::shared_ptr<LRUKNode> prev{nullptr}, next{nullptr};
+  std::shared_ptr<LRUKNode> prev_{nullptr}, next_{nullptr};
   frame_id_t fid_{-1};
   bool is_evictable_{false};
 
@@ -147,12 +147,12 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
-  auto evit_(frame_id_t *frame_id) -> bool;
-  auto getTimeStamp() -> size_t;
-  auto cmp(std::shared_ptr<LRUKNode> n1, std::shared_ptr<LRUKNode> n2) -> bool;
-  auto move_forward(std::shared_ptr<LRUKNode> n) -> void;
-  auto move_backward(std::shared_ptr<LRUKNode> n) -> void;
-  auto detach(std::shared_ptr<LRUKNode> n) -> void;
+  auto EvictNoLock(frame_id_t *frame_id) -> bool;
+  auto GetTimeStamp() -> size_t;
+  auto CMP(const std::shared_ptr<LRUKNode> &n1, const std::shared_ptr<LRUKNode> &n2) -> bool;
+  auto MoveForward(const std::shared_ptr<LRUKNode> &n) -> void;
+  auto MoveBackward(const std::shared_ptr<LRUKNode> &n) -> void;
+  auto Detach(const std::shared_ptr<LRUKNode> &n) -> void;
 
  private:
   // TODO(student): implement me! You can replace these member variables as you like.

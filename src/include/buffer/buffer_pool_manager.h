@@ -208,5 +208,6 @@ class BufferPoolManager {
   }
 
   // TODO(student): You may add additional private members and helper functions
+  auto FetchPageFromDisk();
 };
 }  // namespace bustub
