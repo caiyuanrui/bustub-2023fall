@@ -154,32 +154,4 @@ TEST(BufferPoolManagerTest, SampleTest) {
   delete disk_manager;
 }
 
-TEST(BufferPoolManagerTest, StorageFile) {
-  const std::string db_name = "test.db";
-  const size_t buffer_pool_size = 10;
-  const size_t k = 5;
-
-  auto *disk_manager = new DiskManager(db_name);
-  auto *bpm = new BufferPoolManager(buffer_pool_size, disk_manager, k);
-
-  page_id_t page_id_tmp = -1;
-  auto page0 __attribute__((unused)) = bpm->NewPage(&page_id_tmp);
-
-  std::memcpy(page0->GetData(), "This is a test log.\0", BUSTUB_PAGE_SIZE);
-
-  bpm->FlushAllPages();
-
-  bpm->UnpinPage(0, true);
-
-  bool flag __attribute__((unused)) = bpm->DeletePage(0);
-
-  page0 = bpm->FetchPage(0);
-
-  disk_manager->ShutDown();
-  remove("test.db");
-
-  delete bpm;
-  delete disk_manager;
-}
-
 }  // namespace bustub

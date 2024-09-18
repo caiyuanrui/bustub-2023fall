@@ -13,6 +13,8 @@ else
     mkdir build && cd build || exit
 fi
 
-cmake -DCMAKE_BUILD_TYPE=Debug -DBUSTUB_SANITIZER= ..
+cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -DCMAKE_BUILD_TYPE=Debug ..
+# use the following cmake command if you don't want Sanitizer
+# cmake -DCMAKE_BUILD_TYPE=Debug -DBUSTUB_SANITIZER= ..
 
 make -j"$(nproc)"

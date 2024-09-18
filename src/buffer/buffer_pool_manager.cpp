@@ -16,8 +16,6 @@
 #include <utility>
 
 #include "common/config.h"
-#include "common/exception.h"
-#include "common/macros.h"
 #include "storage/disk/disk_scheduler.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
@@ -48,42 +46,40 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   std::lock_guard lk(latch_);
 
   frame_id_t frame_id = -1;
+  Page *page = nullptr;
 
   if (!free_list_.empty()) {
     frame_id = free_list_.front();
     free_list_.pop_front();
+    page = &pages_[frame_id];
   } else {
     if (!replacer_->Evict(&frame_id)) {
       page_id = nullptr;
       return nullptr;
     }
 
-    Page *old_page = &pages_[frame_id];
+    page = &pages_[frame_id];
 
-    if (old_page->IsDirty()) {
+    if (page->IsDirty()) {
       // write old page back to disk
-      std::promise<bool> p;
+      auto p = disk_scheduler_->CreatePromise();
       auto f = p.get_future();
-      disk_scheduler_->Schedule({true, old_page->GetData(), old_page->page_id_, std::move(p)});
-      if (!f.get()) {
-        throw ExceptionType::UNKNOWN_TYPE;
-      }
+      disk_scheduler_->Schedule({true, page->GetData(), page->GetPageId(), std::move(p)});
+      f.get();
     }
-    // delete old page from buffer bool
-    page_table_.erase(page_table_.find(old_page->page_id_));
-    // page->ResetMemory();
   }
 
-  *page_id = AllocatePage();
-  Page *page = &pages_[frame_id];
-
+  // you need to reset the candidate page first
+  // page_table_.erase(frame_id); // OMG!! I debuged this for two days :(
+  page_table_.erase(page->GetPageId());
   page->ResetMemory();
-
-  page->page_id_ = *page_id;
   page->is_dirty_ = false;
   page->pin_count_ = 1;
 
-  page_table_.insert_or_assign(*page_id, frame_id);
+  // assign a new page id
+  page->page_id_ = *page_id = AllocatePage();
+
+  page_table_.emplace(*page_id, frame_id);
 
   replacer_->RecordAccess(frame_id);
   replacer_->SetEvictable(frame_id, false);
@@ -94,40 +90,47 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
   std::lock_guard lk(latch_);
 
-  auto frame_id_itr = page_table_.find(page_id);
+  if (page_id == INVALID_PAGE_ID) {
+    return nullptr;
+  }
 
-  if (frame_id_itr != page_table_.end()) {
-    Page *page = &pages_[frame_id_itr->second];
+  auto itr = page_table_.find(page_id);
+
+  // If page exists
+  if (itr != page_table_.end()) {
+    auto frame_id = itr->second;
+    auto page = &pages_[frame_id];  // page_ maybe not update even page_table_ has updated!!!
+
+    replacer_->RecordAccess(frame_id);
+    replacer_->SetEvictable(frame_id, false);
     page->pin_count_++;
     return page;
   }
 
-  // fetch a new page
   frame_id_t frame_id = -1;
+  Page *page = nullptr;
 
   // get a frame and reset it
   if (!free_list_.empty()) {
     frame_id = free_list_.front();
     free_list_.pop_front();
+    page = &pages_[frame_id];
   } else {
     if (!replacer_->Evict(&frame_id)) {
       return nullptr;
     }
 
-    Page *page = &pages_[frame_id];
+    page = &pages_[frame_id];
     if (page->IsDirty()) {
-      std::promise<bool> p;
-      auto f = p.get_future();
-      disk_scheduler_->Schedule({true, page->GetData(), page->page_id_, std::move(p)});
-      if (!f.get()) {
-        return nullptr;
-      }
-      page_table_.erase(page_table_.find(page->page_id_));
-      page->ResetMemory();
+      std::promise<bool> promise;
+      auto future = promise.get_future();
+      disk_scheduler_->Schedule({true, page->GetData(), page->page_id_, std::move(promise)});
+      future.get();
     }
   }
 
-  Page *page = &pages_[frame_id];
+  page_table_.erase(page->page_id_);
+  page->ResetMemory();
 
   page->page_id_ = page_id;
   page->is_dirty_ = false;
@@ -137,7 +140,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
   std::promise<bool> promise;
   auto future = promise.get_future();
   disk_scheduler_->Schedule({false, page->GetData(), page->GetPageId(), std::move(promise)});
-  auto res __attribute__((unused)) = future.get();
+  future.get();
 
   page_table_.insert_or_assign(page_id, frame_id);
 
@@ -194,31 +197,41 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
 
   page->is_dirty_ = false;
 
+  // spdlog::warn("{} FlushPage(page_id_t {}) If write back in disk: {}", ss.str(), page_id, flag);
+
   return true;
 }
 
 void BufferPoolManager::FlushAllPages() {
   std::lock_guard lk(latch_);
 
-  auto futures = std::vector<std::future<bool>>();
-
-  for (auto itr : page_table_) {
-    page_id_t page_id = itr.first;
-    frame_id_t frame_id = itr.second;
-    Page *page = &pages_[frame_id];
-
-    std::promise<bool> promise;
-    futures.push_back(promise.get_future());
-    disk_scheduler_->Schedule({true, page->GetData(), page_id, std::move(promise)});
-
-    page->is_dirty_ = false;
+  for (auto &[page_id, frame_id] : page_table_) {
+    auto &page = pages_[page_id];
+    auto promise = disk_scheduler_->CreatePromise();
+    auto future = promise.get_future();
+    disk_scheduler_->Schedule({true, page.GetData(), page_id, std::move(promise)});
+    future.get();
   }
 
-  for (auto &future : futures) {
-    if (!future.get()) {
-      throw ExceptionType::UNKNOWN_TYPE;
-    }
-  }
+  // auto futures = std::vector<std::future<bool>>();
+
+  // for (auto itr : page_table_) {
+  //   page_id_t page_id = itr.first;
+  //   frame_id_t frame_id = itr.second;
+  //   Page *page = &pages_[frame_id];
+
+  //   std::promise<bool> promise;
+  //   futures.push_back(promise.get_future());
+  //   disk_scheduler_->Schedule({true, page->GetData(), page_id, std::move(promise)});
+
+  //   page->is_dirty_ = false;
+  // }
+
+  // for (auto &future : futures) {
+  //   if (!future.get()) {
+  //     throw ExceptionType::UNKNOWN_TYPE;
+  //   }
+  // }
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {

@@ -12,6 +12,7 @@
 
 #include "storage/disk/disk_scheduler.h"
 #include <optional>
+#include <thread>
 #include "common/exception.h"
 #include "storage/disk/disk_manager.h"
 
@@ -39,20 +40,21 @@ void DiskScheduler::Schedule(DiskRequest r) { request_queue_.Put(std::move(r)); 
 
 void DiskScheduler::StartWorkerThread() {
   std::optional<DiskRequest> r;
-  r = request_queue_.Get();
-  while (r != std::nullopt) {
-    //
-    auto req = std::move(r.value());
 
-    if (req.is_write_) {
-      disk_manager_->WritePage(req.page_id_, req.data_);
-    } else {
-      disk_manager_->ReadPage(req.page_id_, req.data_);
-    }
-
-    req.callback_.set_value(true);
-    r = request_queue_.Get();
+  while ((r = request_queue_.Get()) != std::nullopt) {
+    std::thread t(&DiskScheduler::Proccess, this, std::move(r.value()));
+    t.join();
   }
+}
+
+void DiskScheduler::Proccess(DiskRequest req) {
+  if (req.is_write_) {
+    disk_manager_->WritePage(req.page_id_, req.data_);
+  } else {
+    disk_manager_->ReadPage(req.page_id_, req.data_);
+  }
+
+  req.callback_.set_value(true);
 }
 
 }  // namespace bustub

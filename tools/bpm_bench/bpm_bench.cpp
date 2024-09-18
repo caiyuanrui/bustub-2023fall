@@ -1,10 +1,8 @@
-#include <chrono>
 #include <exception>
 #include <iostream>
 #include <memory>
 #include <mutex>  // NOLINT
 #include <random>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
@@ -13,14 +11,10 @@
 #include <cpp_random_distributions/zipfian_int_distribution.h>
 
 #include "argparse/argparse.hpp"
-#include "binder/binder.h"
 #include "buffer/buffer_pool_manager.h"
 #include "buffer/lru_k_replacer.h"
 #include "common/config.h"
-#include "common/exception.h"
-#include "common/util/string_util.h"
 #include "fmt/core.h"
-#include "fmt/std.h"
 #include "storage/disk/disk_manager_memory.h"
 
 #include <sys/time.h>
@@ -227,6 +221,7 @@ auto main(int argc, char **argv) -> int {
   std::vector<std::thread> threads;
   using ModifyRecord = std::unordered_map<page_id_t, uint64_t>;
 
+  // loop of FetchPage and
   for (size_t thread_id = 0; thread_id < scan_thread_n; thread_id++) {
     threads.emplace_back([bustub_page_cnt, scan_thread_n, thread_id, &page_ids, &bpm, duration_ms, &total_metrics] {
       ModifyRecord records;

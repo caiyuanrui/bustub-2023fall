@@ -14,7 +14,6 @@
 
 #include <cstddef>
 #include <list>
-#include <memory>
 #include <mutex>  // NOLINT
 #include <unordered_map>
 
@@ -26,13 +25,25 @@ namespace bustub {
 enum class AccessType { Unknown = 0, Lookup, Scan, Index };
 
 struct LRUKNode {
-  std::list<size_t> history_;
-  std::shared_ptr<LRUKNode> prev_{nullptr}, next_{nullptr};
+ public:
+  LRUKNode() = delete;
+  explicit LRUKNode(frame_id_t fid, size_t k) noexcept;
+  explicit LRUKNode(frame_id_t fid, size_t k, size_t current_timestamp) noexcept;
+
+  ~LRUKNode() = default;
+
+  auto GetFrameId() -> frame_id_t { return fid_; }
+  auto IsEvictable() -> bool { return is_evictable_; }
+  void SetEvictable(bool is_evictable) noexcept { is_evictable_ = is_evictable; }
+  void UpdateHistory(size_t current_timestamp);
+  auto EarliestTimestamp() -> size_t { return history_.front(); }
+  auto IsFull() -> bool { return history_.size() >= k_; }
+
+ private:
+  size_t k_{0};
   frame_id_t fid_{-1};
   bool is_evictable_{false};
-
-  LRUKNode() = default;
-  LRUKNode(size_t ts, frame_id_t fid);
+  std::list<size_t> history_{};
 };
 
 /**
@@ -147,26 +158,26 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
-  auto EvictNoLock(frame_id_t *frame_id) -> bool;
-  auto GetTimeStamp() -> size_t;
-  auto CMP(const std::shared_ptr<LRUKNode> &n1, const std::shared_ptr<LRUKNode> &n2) -> bool;
-  auto MoveForward(const std::shared_ptr<LRUKNode> &n) -> void;
-  auto MoveBackward(const std::shared_ptr<LRUKNode> &n) -> void;
-  auto Detach(const std::shared_ptr<LRUKNode> &n) -> void;
-
- private:
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   // std::unordered_map<frame_id_t, LRUKNode *> node_store_;
   // std::unordered_map<frame_id_t, LRUKNode *> node_store_;
   // HashLinkedList node_store_;
-  std::unordered_map<frame_id_t, std::shared_ptr<LRUKNode>> map_;
-  std::shared_ptr<LRUKNode> head_, tail_;
+  // std::unordered_map<frame_id_t, std::list<LRUKNode>::iterator> map_;
+  // std::list<LRUKNode> list_;
+  std::unordered_map<frame_id_t, LRUKNode> node_store_{};
   size_t current_timestamp_{0};
   size_t curr_size_{0};
   size_t replacer_size_;
   size_t k_;
   std::mutex latch_;
+
+  /**
+   * @brief Get the Time Stamp object
+   *
+   * @return size_t
+   */
+  auto GetTimeStamp() -> size_t;
 };
 
 }  // namespace bustub

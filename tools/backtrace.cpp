@@ -10,7 +10,7 @@ class TerminateHandler {
       st.load_here(32);
       backward::Printer p;
       p.object = true;
-      p.snippet = false;
+      p.snippet = true;
       p.color_mode = backward::ColorMode::automatic;
       p.address = true;
       p.print(st, stderr);

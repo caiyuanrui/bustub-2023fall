@@ -13,44 +13,78 @@
 #include "buffer/lru_k_replacer.h"
 #include <chrono>
 #include <cstddef>
-#include <memory>
+#include <limits>
 #include <mutex>
 #include "common/config.h"
 #include "common/exception.h"
 
 namespace bustub {
 
-LRUKNode::LRUKNode(size_t ts, frame_id_t fid) : history_{ts}, fid_(fid) {}
+LRUKNode::LRUKNode(frame_id_t fid, size_t k) noexcept : k_(k), fid_(fid) {}
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k)
-    : head_(std::make_shared<LRUKNode>()), tail_(std::make_shared<LRUKNode>()), replacer_size_(num_frames), k_(k) {
-  head_->next_ = tail_;
-  tail_->prev_ = head_;
+LRUKNode::LRUKNode(frame_id_t fid, size_t k, size_t current_timestamp) noexcept : k_(k), fid_(fid) {
+  history_.push_back(current_timestamp);
 }
+
+void LRUKNode::UpdateHistory(size_t current_timestamp) {
+  if (history_.size() >= k_) {
+    history_.pop_front();
+  }
+  history_.push_back(current_timestamp);
+}
+
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::lock_guard guard(latch_);
-  return EvictNoLock(frame_id);
-}
 
-auto LRUKReplacer::EvictNoLock(frame_id_t *frame_id) -> bool {
-  if (curr_size_ == 0) {
+  if (curr_size_ <= 0) {
     *frame_id = -1;
     return false;
   }
 
-  for (auto it = head_->next_; it != tail_; it = it->next_) {
-    if (it->is_evictable_) {
-      *frame_id = it->fid_;
-      curr_size_--;
-      Detach(it);
-      map_.erase(map_.find(it->fid_));
-      return true;
+  // frame_id, earliest timestamp, has INF already
+  auto candidate = std::tuple<frame_id_t, size_t, bool>(-1, std::numeric_limits<size_t>::max(), false);
+
+  // transverse node_store_ and find the least recently used node, store the result in candidate variable
+  for (auto itr : node_store_) {
+    // If node is inevictable, ignore it
+    if (!itr.second.IsEvictable()) {
+      continue;
+    }
+
+    // If has INF already, just compare INF nodes
+    if (std::get<bool>(candidate)) {
+      if (!itr.second.IsFull() && itr.second.EarliestTimestamp() < std::get<size_t>(candidate)) {
+        std::get<frame_id_t>(candidate) = itr.first;
+        std::get<size_t>(candidate) = itr.second.EarliestTimestamp();
+      }
+    } else {
+      if (itr.second.IsFull()) {
+        // Find the node with minimum earliest timestamp
+        if (itr.second.EarliestTimestamp() < std::get<size_t>(candidate)) {
+          std::get<frame_id_t>(candidate) = itr.second.GetFrameId();
+          std::get<size_t>(candidate) = itr.second.EarliestTimestamp();
+        }
+      } else {
+        // If node is INF, take it directly
+        std::get<frame_id_t>(candidate) = itr.second.GetFrameId();
+        std::get<size_t>(candidate) = itr.second.EarliestTimestamp();
+        std::get<bool>(candidate) = true;
+      }
     }
   }
 
-  *frame_id = -1;
-  return false;
+  if (std::get<frame_id_t>(candidate) == -1) {
+    return false;
+  }
+
+  node_store_.erase(std::get<frame_id_t>(candidate));
+  curr_size_--;
+
+  *frame_id = std::get<frame_id_t>(candidate);
+
+  return true;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
@@ -59,127 +93,56 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   current_timestamp_ = GetTimeStamp();
 
   if (frame_id < 0 || static_cast<size_t>(frame_id) > replacer_size_) {
-    throw ExceptionType::INVALID;
+    throw Exception("LRUKReplacer: frame_id is invalid");
   }
 
-  auto it = map_.find(frame_id);
+  auto itr = node_store_.find(frame_id);
 
-  if (it != map_.end()) {
-    if (it->second->history_.size() >= k_) {
-      it->second->history_.pop_front();
-    }
-    it->second->history_.push_back(current_timestamp_);
-    MoveBackward(it->second);
+  if (itr == node_store_.end()) {
+    // If frame doesn't exist, create a new frame entry
+    node_store_.emplace(frame_id, LRUKNode(frame_id, k_, current_timestamp_));
   } else {
-    auto new_node = std::make_shared<LRUKNode>(current_timestamp_, frame_id);
-    map_.insert({frame_id, new_node});
-    new_node->prev_ = tail_->prev_;
-    new_node->next_ = tail_;
-    tail_->prev_->next_ = new_node;
-    tail_->prev_ = new_node;
-    MoveForward(new_node);
+    // If frame already exists, update the node's timestamp
+    itr->second.UpdateHistory(current_timestamp_);
   }
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   std::lock_guard guard(latch_);
 
-  auto it = map_.find(frame_id);
+  auto itr = node_store_.find(frame_id);
 
-  if (it != map_.end()) {
-    if (it->second->is_evictable_ && !set_evictable) {
-      curr_size_--;
+  if (itr == node_store_.end()) {
+    throw Exception("LRUKReplacer: frame_id is invalid");
+  }
 
-    } else if (!it->second->is_evictable_ && set_evictable) {
-      if (curr_size_ >= replacer_size_) {
-        auto frame_id = std::make_shared<frame_id_t>(-1);
-
-        if (!Evict(frame_id.get())) {
-          throw ExceptionType::UNKNOWN_TYPE;
-        };
-
-      } else {
-        curr_size_++;
-      }
-    }
-
-    it->second->is_evictable_ = set_evictable;
+  if (itr->second.IsEvictable() && !set_evictable) {
+    itr->second.SetEvictable(set_evictable);
+    curr_size_--;
+  } else if (!itr->second.IsEvictable() && set_evictable) {
+    itr->second.SetEvictable(set_evictable);
+    curr_size_++;
   }
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::lock_guard guard(latch_);
 
-  auto it = map_.find(frame_id);
+  auto itr = node_store_.find(frame_id);
 
-  if (it != map_.end()) {
-    if (it->second->is_evictable_) {
-      curr_size_--;
-    }
-    Detach(it->second);
-    map_.erase(it);
+  if (itr == node_store_.end()) {
+    return;
+  }
+  if (itr->second.IsEvictable()) {
+    node_store_.erase(itr);
+    curr_size_--;
+  } else {
+    throw Exception("LRUKReplacer: frame_id is not evictable");
   }
 }
 
 auto LRUKReplacer::Size() -> size_t { return curr_size_; }
 
 auto LRUKReplacer::GetTimeStamp() -> size_t { return std::chrono::steady_clock::now().time_since_epoch().count(); }
-
-auto LRUKReplacer::CMP(const std::shared_ptr<LRUKNode> &n1, const std::shared_ptr<LRUKNode> &n2) -> bool {
-  auto k1 = n1->history_.size() == k_;
-  auto k2 = n2->history_.size() == k_;
-
-  if (k1 == k2) {
-    return n1->history_.front() < n2->history_.front();
-  }
-  return k2;
-}
-
-auto LRUKReplacer::MoveForward(const std::shared_ptr<LRUKNode> &n) -> void {
-  auto p = n->prev_;
-
-  while (true) {
-    if (CMP(p, n) || p == head_) {
-      break;
-    }
-    p = p->prev_;
-  }
-
-  if (p->next_ == n) {
-    return;
-  }
-
-  Detach(n);
-  n->prev_ = p;
-  n->next_ = p->next_;
-  p->next_->prev_ = n;
-  p->next_ = n;
-}
-
-auto LRUKReplacer::MoveBackward(const std::shared_ptr<LRUKNode> &n) -> void {
-  auto p = n->next_;
-
-  while (true) {
-    if (CMP(n, p) || p == tail_) {
-      break;
-    }
-    p = p->next_;
-  }
-
-  if (n->next_ == p) {
-    return;
-  }
-
-  Detach(n);
-  n->next_ = p;
-  n->prev_ = p->prev_;
-  p->prev_->next_ = n;
-  p->prev_ = n;
-}
-
-auto LRUKReplacer::Detach(const std::shared_ptr<LRUKNode> &n) -> void {
-  n->prev_->next_ = n->next_;
-  n->next_->prev_ = n->prev_;
-}
 
 }  // namespace bustub
