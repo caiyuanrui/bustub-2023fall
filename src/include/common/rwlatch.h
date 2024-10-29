@@ -12,10 +12,7 @@
 
 #pragma once
 
-#include <mutex>  // NOLINT
 #include <shared_mutex>
-
-#include "common/macros.h"
 
 namespace bustub {
 

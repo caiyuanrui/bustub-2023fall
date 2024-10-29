@@ -197,8 +197,6 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
 
   page->is_dirty_ = false;
 
-  // spdlog::warn("{} FlushPage(page_id_t {}) If write back in disk: {}", ss.str(), page_id, flag);
-
   return true;
 }
 
@@ -212,26 +210,6 @@ void BufferPoolManager::FlushAllPages() {
     disk_scheduler_->Schedule({true, page.GetData(), page_id, std::move(promise)});
     future.get();
   }
-
-  // auto futures = std::vector<std::future<bool>>();
-
-  // for (auto itr : page_table_) {
-  //   page_id_t page_id = itr.first;
-  //   frame_id_t frame_id = itr.second;
-  //   Page *page = &pages_[frame_id];
-
-  //   std::promise<bool> promise;
-  //   futures.push_back(promise.get_future());
-  //   disk_scheduler_->Schedule({true, page->GetData(), page_id, std::move(promise)});
-
-  //   page->is_dirty_ = false;
-  // }
-
-  // for (auto &future : futures) {
-  //   if (!future.get()) {
-  //     throw ExceptionType::UNKNOWN_TYPE;
-  //   }
-  // }
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
@@ -268,12 +246,26 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
 
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
-auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard { return {this, nullptr}; }
+auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
+  auto page = this->FetchPage(page_id);
+  return {this, page};
+}
 
-auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard { return {this, nullptr}; }
+auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
+  auto page = this->FetchPage(page_id);
+  page->RLatch();
+  return {this, page};
+}
 
-auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard { return {this, nullptr}; }
+auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
+  auto page = this->FetchPage(page_id);
+  page->WLatch();
+  return {this, page};
+}
 
-auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard { return {this, nullptr}; }
+auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
+  auto page = this->NewPage(page_id);
+  return {this, page};
+}
 
 }  // namespace bustub
