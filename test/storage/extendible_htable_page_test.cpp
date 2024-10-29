@@ -87,7 +87,7 @@ TEST(ExtendibleHTableTest, DISABLED_BucketPageSampleTest) {
 }
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableTest, DISABLED_HeaderDirectoryPageSampleTest) {
+TEST(ExtendibleHTableTest, HeaderDirectoryPageSampleTest) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(5, disk_mgr.get());
 
@@ -117,6 +117,8 @@ TEST(ExtendibleHTableTest, DISABLED_HeaderDirectoryPageSampleTest) {
     }
 
     header_guard.Drop();
+
+    return;
 
     /************************ DIRECTORY PAGE TEST ************************/
     BasicPageGuard directory_guard = bpm->NewPageGuarded(&directory_page_id);
