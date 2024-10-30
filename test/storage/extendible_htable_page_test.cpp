@@ -15,7 +15,9 @@
 #include <vector>
 
 #include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
 #include "common/logger.h"
+#include "fmt/core.h"
 #include "gtest/gtest.h"
 #include "storage/disk/disk_manager_memory.h"
 #include "storage/index/generic_key.h"
@@ -29,7 +31,7 @@
 namespace bustub {
 
 // NOLINTNEXTLINE
-TEST(ExtendibleHTableTest, DISABLED_BucketPageSampleTest) {
+TEST(ExtendibleHTableTest, BucketPageSampleTest) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(5, disk_mgr.get());
 
@@ -117,8 +119,6 @@ TEST(ExtendibleHTableTest, HeaderDirectoryPageSampleTest) {
     }
 
     header_guard.Drop();
-
-    return;
 
     /************************ DIRECTORY PAGE TEST ************************/
     BasicPageGuard directory_guard = bpm->NewPageGuarded(&directory_page_id);
@@ -276,6 +276,22 @@ TEST(ExtendibleHTableTest, HeaderDirectoryPageSampleTest) {
     ASSERT_EQ(directory_page->Size(), 4);
     ASSERT_EQ(directory_page->CanShrink(), false);
   }  // page guard dropped
+}
+
+TEST(DirectoryPageUnitTest, IncrGlobalDepth) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(5, disk_mgr.get());
+
+  page_id_t directory_page_id;
+  BasicPageGuard directory_guard = bpm->NewPageGuarded(&directory_page_id);
+  auto directory_page = directory_guard.AsMut<ExtendibleHTableDirectoryPage>();
+
+  directory_page->Init(2);
+  directory_page->SetBucketPageId(0, 1);
+  directory_page->IncrGlobalDepth();
+  directory_page->IncrLocalDepth(0);
+  directory_page->IncrGlobalDepth();
+  directory_page->SetBucketPageId(0, 2);
 }
 
 }  // namespace bustub

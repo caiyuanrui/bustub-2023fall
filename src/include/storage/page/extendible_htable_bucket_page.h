@@ -132,8 +132,8 @@ class ExtendibleHTableBucketPage {
   void PrintBucket() const;
 
  private:
-  uint32_t size_;
-  uint32_t max_size_;
+  uint32_t size_ = 0;
+  uint32_t max_size_ = HTableBucketArraySize(sizeof(MappingType));
   MappingType array_[HTableBucketArraySize(sizeof(MappingType))];
 };
 

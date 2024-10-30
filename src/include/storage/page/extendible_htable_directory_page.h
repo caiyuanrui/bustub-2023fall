@@ -21,6 +21,7 @@
 
 #include <cassert>
 #include <climits>
+#include <cstdint>
 #include <cstdlib>
 #include <string>
 
@@ -190,8 +191,17 @@ class ExtendibleHTableDirectoryPage {
   void PrintDirectory() const;
 
  private:
-  uint32_t max_depth_;
-  uint32_t global_depth_;
+  // The least significant bit is at 1 index (depth = 1).
+  auto ImageIndex(uint32_t val, uint32_t depth) const -> uint32_t {
+    assert(depth > 0 && "image index of zero is itself");
+    return val ^ (1 << (depth - 1));
+  }
+
+  
+
+ private:
+  uint32_t max_depth_ = HTABLE_DIRECTORY_MAX_DEPTH;
+  uint32_t global_depth_ = 0;
   uint8_t local_depths_[HTABLE_DIRECTORY_ARRAY_SIZE];
   page_id_t bucket_page_ids_[HTABLE_DIRECTORY_ARRAY_SIZE];
 };
