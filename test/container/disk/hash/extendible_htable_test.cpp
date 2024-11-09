@@ -22,6 +22,21 @@
 
 namespace bustub {
 
+template <typename... Args>
+void LaunchParallelTest(uint64_t num_threads, Args &&...args) {
+  std::vector<std::thread> thread_group;
+
+  // Launch a group of threads
+  for (uint64_t thread_itr = 0; thread_itr < num_threads; ++thread_itr) {
+    thread_group.push_back(std::thread(args..., thread_itr));
+  }
+
+  // Join the threads with the main thread
+  for (uint64_t thread_itr = 0; thread_itr < num_threads; ++thread_itr) {
+    thread_group[thread_itr].join();
+  }
+}
+
 // NOLINTNEXTLINE
 TEST(ExtendibleHTableTest, InsertTest1) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
@@ -154,6 +169,13 @@ TEST(ExtendibleHTableTest, RemoveTest1) {
   }
 
   ht.VerifyIntegrity();
+}
+
+TEST(ExtendibleHTableTest, RemoveTest2) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
+
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(), 2, 3, 2);
 }
 
 }  // namespace bustub

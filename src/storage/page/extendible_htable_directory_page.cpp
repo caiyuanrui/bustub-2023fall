@@ -13,6 +13,7 @@
 #include "storage/page/extendible_htable_directory_page.h"
 #include <sys/types.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -28,8 +29,8 @@ void ExtendibleHTableDirectoryPage::Init(uint32_t max_depth) {
   assert(max_depth <= HTABLE_DIRECTORY_MAX_DEPTH);
   max_depth_ = max_depth;
   global_depth_ = 0;
-  std::memset(local_depths_, 0, HTABLE_DIRECTORY_ARRAY_SIZE);
-  std::memset(bucket_page_ids_, INVALID_PAGE_ID, HTABLE_DIRECTORY_ARRAY_SIZE);
+  std::fill_n(local_depths_, HTABLE_DIRECTORY_ARRAY_SIZE, 0);
+  std::fill_n(bucket_page_ids_, HTABLE_DIRECTORY_ARRAY_SIZE, INVALID_PAGE_ID);
 }
 
 auto ExtendibleHTableDirectoryPage::HashToBucketIndex(uint32_t hash) const -> uint32_t {
@@ -129,32 +130,34 @@ void ExtendibleHTableDirectoryPage::SetLocalDepth(uint32_t bucket_idx, uint8_t l
     throw Exception("Bucket index is out of boundary");
   }
 
-  for (uint32_t bucket_idx_ : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
-    local_depths_[bucket_idx_] = local_depth;
+  for (uint32_t bucket_idx : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
+    local_depths_[bucket_idx] = local_depth;
   }
 }
 
 void ExtendibleHTableDirectoryPage::IncrLocalDepth(uint32_t bucket_idx) {
   if (bucket_idx >= Size()) {
     throw Exception("Bucket index is out of boundary");
-  } else if (local_depths_[bucket_idx] >= global_depth_) {
+  }
+  if (local_depths_[bucket_idx] >= global_depth_) {
     throw Exception("Local depth cannot increase");
   }
 
-  for (uint32_t bucket_idx_ : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
-    local_depths_[bucket_idx_] += 1;
+  for (uint32_t bucket_idx : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
+    local_depths_[bucket_idx] += 1;
   }
 }
 
 void ExtendibleHTableDirectoryPage::DecrLocalDepth(uint32_t bucket_idx) {
   if (bucket_idx >= Size()) {
     throw Exception("Bucket index is out of boundary");
-  } else if (local_depths_[bucket_idx] == 0) {
+  }
+  if (local_depths_[bucket_idx] == 0) {
     throw Exception("Local depth cannot decrease");
   }
 
-  for (uint32_t bucket_idx_ : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
-    local_depths_[bucket_idx_] -= 1;
+  for (uint32_t bucket_idx : GetAllSplitImageIndex(bucket_idx, global_depth_, local_depths_[bucket_idx])) {
+    local_depths_[bucket_idx] -= 1;
   }
 }
 

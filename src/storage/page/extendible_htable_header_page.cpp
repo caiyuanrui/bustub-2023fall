@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/extendible_htable_header_page.h"
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -23,7 +24,7 @@ namespace bustub {
 void ExtendibleHTableHeaderPage::Init(uint32_t max_depth) {
   assert(max_depth <= HTABLE_HEADER_MAX_DEPTH && "header page's max depth is out of range");
   max_depth_ = max_depth;
-  std::memset(directory_page_ids_, INVALID_PAGE_ID, HTABLE_HEADER_ARRAY_SIZE);
+  std::fill_n(directory_page_ids_, HTABLE_HEADER_ARRAY_SIZE, INVALID_PAGE_ID);
 }
 
 auto ExtendibleHTableHeaderPage::HashToDirectoryIndex(uint32_t hash) const -> uint32_t {

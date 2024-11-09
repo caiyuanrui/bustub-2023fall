@@ -94,8 +94,8 @@ class ExtendibleHTableDirectoryPage {
    * @param bucket_idx the directory index for which to find the split image
    * @return std::vector<uint32_t>
    */
-  static auto GetAllSplitImageIndex(uint32_t bucket_idx, uint32_t global_depth,
-                                    uint8_t local_depth) -> std::vector<uint32_t>;
+  static auto GetAllSplitImageIndex(uint32_t bucket_idx, uint32_t global_depth, uint8_t local_depth)
+      -> std::vector<uint32_t>;
 
   /**
    * GetGlobalDepthMask - returns a mask of global_depth 1's and the rest 0's.

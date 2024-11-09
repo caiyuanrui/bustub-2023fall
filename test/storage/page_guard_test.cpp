@@ -11,9 +11,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdio>
+#include <mutex>
 #include <shared_mutex>
+#include <thread>
+#include <vector>
 
 #include "buffer/buffer_pool_manager.h"
+#include "common/config.h"
+#include "common/exception.h"
 #include "fmt/core.h"
 #include "storage/disk/disk_manager_memory.h"
 #include "storage/page/page_guard.h"
@@ -53,29 +58,82 @@ TEST(PageGuardTest, SampleTest) {
   disk_manager->ShutDown();
 }
 
-TEST(PageGuardTest, MyTest) {
-  const size_t buffer_pool_size = 5;
+TEST(PageGuardTest, BPMTest) {
+  const size_t buffer_pool_size = 50;
   const size_t k = 2;
 
   auto disk_manager = std::make_shared<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_shared<BufferPoolManager>(buffer_pool_size, disk_manager.get(), k);
 
-  page_id_t page_id_temp = -1;
-  auto page0 = bpm->NewPageGuarded(&page_id_temp);
-  auto page1 = bpm->NewPageGuarded(&page_id_temp);
+  // One thread
+  page_id_t page_id_temp;
+  auto page0_guard = bpm->NewPageGuarded(&page_id_temp).UpgradeRead();
+  ASSERT_EQ(1, page0_guard.GetPinCount());
 
   {
-    // mutiple reads are allowed
-    auto p1 = bpm->FetchPageRead(page_id_temp);
-    auto p2 = bpm->FetchPageRead(page_id_temp);
-    ASSERT_EQ(p1.GetData(), page1.GetData());
-    ASSERT_EQ(p2.GetData(), page1.GetData());
-    ASSERT_EQ(p1.PageId(), page1.PageId());
-    ASSERT_EQ(p2.PageId(), page1.PageId());
+    auto page0_guard_copy0 = bpm->FetchPageRead(page_id_temp);
+
+    ASSERT_EQ(2, page0_guard.GetPinCount());
+    ASSERT_EQ(2, page0_guard_copy0.GetPinCount());
+
+    auto page0_guard_copy1 = bpm->FetchPageRead(page_id_temp);
+
+    ASSERT_EQ(3, page0_guard.GetPinCount());
+    ASSERT_EQ(3, page0_guard_copy0.GetPinCount());
+    ASSERT_EQ(3, page0_guard_copy1.GetPinCount());
+
+    page0_guard_copy0.Drop();
+
+    ASSERT_EQ(2, page0_guard.GetPinCount());
+    ASSERT_EQ(2, page0_guard_copy1.GetPinCount());
   }
 
-  { auto p1 = bpm->FetchPageWrite(0); }
-  { auto p2 = bpm->FetchPageWrite(1); }
+  ASSERT_EQ(1, page0_guard.GetPinCount());
+
+  // Multithread
+  auto write = [&bpm] {
+    page_id_t page_id = INVALID_PAGE_ID;
+    bool is_succeed = false;
+    while (!is_succeed) {
+      try {
+        auto page_guard = bpm->NewPageGuarded(&page_id).UpgradeWrite();
+        ASSERT_EQ(1, page_guard.GetPinCount());
+        is_succeed = true;
+      } catch (Exception excp) {
+      }
+    }
+  };
+
+  std::vector<std::thread> handlers;
+
+  for (int i = 0; i < 100; i++) {
+    handlers.emplace_back(std::thread(write));
+  }
+
+  for (int i = 0; i < 100; i++) {
+    handlers[i].join();
+  }
+
+  std::mutex m;
+  volatile int count = 0;
+  page_id_t page_id = INVALID_PAGE_ID;
+  bpm->NewPageGuarded(&page_id);
+  auto read = [&bpm, &page_id, &m, &count] {
+    auto page_guard = bpm->FetchPageRead(page_id);
+    std::lock_guard<std::mutex> lock(m);
+    count++;
+  };
+
+  std::vector<std::thread> ts;
+  for (int i = 0; i < 100; i++) {
+    ts.emplace_back(std::thread(read));
+  }
+
+  for (auto &t : ts) {
+    t.join();
+  }
+
+  ASSERT_EQ(100, count);
 }
 
 }  // namespace bustub
