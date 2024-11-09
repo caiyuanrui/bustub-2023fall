@@ -89,6 +89,15 @@ class ExtendibleHTableDirectoryPage {
   auto GetSplitImageIndex(uint32_t bucket_idx) const -> uint32_t;
 
   /**
+   * Get all split image of indexs including the original one (sorted)
+   *
+   * @param bucket_idx the directory index for which to find the split image
+   * @return std::vector<uint32_t>
+   */
+  static auto GetAllSplitImageIndex(uint32_t bucket_idx, uint32_t global_depth,
+                                    uint8_t local_depth) -> std::vector<uint32_t>;
+
+  /**
    * GetGlobalDepthMask - returns a mask of global_depth 1's and the rest 0's.
    *
    * In Extendible Hashing we map a key to a directory index
@@ -189,15 +198,6 @@ class ExtendibleHTableDirectoryPage {
    * Prints the current directory
    */
   void PrintDirectory() const;
-
- private:
-  // The least significant bit is at 1 index (depth = 1).
-  auto ImageIndex(uint32_t val, uint32_t depth) const -> uint32_t {
-    assert(depth > 0 && "image index of zero is itself");
-    return val ^ (1 << (depth - 1));
-  }
-
-  
 
  private:
   uint32_t max_depth_ = HTABLE_DIRECTORY_MAX_DEPTH;

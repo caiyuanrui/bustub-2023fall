@@ -16,6 +16,8 @@
 #include <utility>
 
 #include "common/config.h"
+#include "common/exception.h"
+#include "fmt/core.h"
 #include "storage/disk/disk_scheduler.h"
 #include "storage/page/page.h"
 #include "storage/page/page_guard.h"
@@ -248,23 +250,35 @@ auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
 auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
   auto page = this->FetchPage(page_id);
+  if (page == nullptr) {
+    throw Exception(fmt::format("Failed to fetch the page {} because all frames are pinned", page_id));
+  }
   return {this, page};
 }
 
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
   auto page = this->FetchPage(page_id);
+  if (page == nullptr) {
+    throw Exception(fmt::format("Failed to fetch the page {} because all frames are pinned", page_id));
+  }
   page->RLatch();
   return {this, page};
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
   auto page = this->FetchPage(page_id);
+  if (page == nullptr) {
+    throw Exception(fmt::format("Failed to fetch the page {} because all frames are pinned", page_id));
+  }
   page->WLatch();
   return {this, page};
 }
 
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
   auto page = this->NewPage(page_id);
+  if (page == nullptr) {
+    throw Exception("Failed to create a new page because all frames are pinned");
+  }
   return {this, page};
 }
 

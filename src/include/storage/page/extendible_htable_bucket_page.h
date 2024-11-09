@@ -23,11 +23,13 @@
  */
 #pragma once
 
+#include <cstdint>
 #include <optional>
 #include <utility>
 #include <vector>
 
 #include "common/config.h"
+#include "common/exception.h"
 #include "common/macros.h"
 #include "storage/index/int_comparator.h"
 #include "storage/page/b_plus_tree_page.h"
@@ -79,6 +81,22 @@ class ExtendibleHTableBucketPage {
   auto Insert(const KeyType &key, const ValueType &value, const KeyComparator &cmp) -> bool;
 
   /**
+   * @brief Modify the key-value pair at the target index. This function doesn't check if the same key is already
+   * present nor the index is valid
+   *
+   * @param bucket_idx
+   * @param key
+   * @param value
+   */
+  void PutAt(uint32_t bucket_idx, const KeyType &key, const ValueType &value) { array_[bucket_idx] = {key, value}; }
+
+  /**
+   * @brief Modify the key-value pair at the target index. This function doesn't check if the same key is already
+   * present nor the index is valid
+   */
+  void PutAt(uint32_t bucket_idx, MappingType &&pair) { array_[bucket_idx] = pair; }
+
+  /**
    * Removes a key and value.
    *
    * @return true if removed, false if not found
@@ -115,6 +133,24 @@ class ExtendibleHTableBucketPage {
    * @return number of entries in the bucket
    */
   auto Size() const -> uint32_t;
+
+  /**
+   * @brief This function doesn't check if `size` is overflow.
+   *
+   * @param size is supposed to be less than or equal to `max_size`
+   */
+  void SetSize(uint32_t size) {
+    if (size <= max_size_) {
+      size_ = size;
+    } else {
+      throw Exception("Customed size is greater than max_size");
+    }
+  }
+
+  /**
+   * @return max number of entries in the bucket
+   */
+  auto MaxSize() const -> uint32_t { return max_size_; }
 
   /**
    * @return whether the bucket is full
