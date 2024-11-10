@@ -258,27 +258,21 @@ auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
 }
 
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
-  LOG_DEBUG("[r] try to lock on pid %d", page_id);
-
   auto page = this->FetchPage(page_id);
   if (page == nullptr) {
     throw Exception(fmt::format("Failed to fetch the page {} because all frames are pinned", page_id));
   }
   page->RLatch();
-  LOG_DEBUG("[r] succeed to lock pid %d", page_id);
 
   return {this, page};
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
-  LOG_DEBUG("[w] try to lock pid %d", page_id);
-
   auto page = this->FetchPage(page_id);
   if (page == nullptr) {
     throw Exception(fmt::format("Failed to fetch the page {} because all frames are pinned", page_id));
   }
   page->WLatch();
-  LOG_DEBUG("[w] succeed to lock pid %d", page_id);
 
   return {this, page};
 }
@@ -286,7 +280,8 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
   auto page = this->NewPage(page_id);
   if (page == nullptr) {
-    throw Exception("Failed to create a new page because all frames are pinned");
+    LOG_ERROR("Failed to create a new page because all frames are pinned");
+    // throw Exception("Failed to create a new page because all frames are pinned");
   }
   return {this, page};
 }

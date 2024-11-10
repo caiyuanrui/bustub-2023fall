@@ -179,7 +179,10 @@ class ExtendibleHTableDirectoryPage {
   void IncrLocalDepth(uint32_t bucket_idx);
 
   /**
-   * Decrement the local depth of the bucket at bucket_idx
+   * Decrement the local depth of the bucket at bucket_idx.
+   *
+   * YOU NEED TO MODIFY THE IMAGE BUCKET'S ATTRIBUTES MANUELLY AND
+   * MAKE SURE, AFTER DECREASING THE LOCAL DEPTH, THEY STILL POINT TO ONE PHYSICAL PAGE.
    * @param bucket_idx bucket index to decrement
    */
   void DecrLocalDepth(uint32_t bucket_idx);

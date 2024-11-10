@@ -92,7 +92,7 @@ class ExtendibleHTableBucketPage {
 
   /**
    * @brief Modify the key-value pair at the target index. This function doesn't check if the same key is already
-   * present nor the index is valid
+   * present nor the index is valid, so use it carefully.
    */
   void PutAt(uint32_t bucket_idx, MappingType &&pair) { array_[bucket_idx] = pair; }
 

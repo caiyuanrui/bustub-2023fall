@@ -10,6 +10,10 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <string>
 #include <thread>  // NOLINT
 #include <vector>
 
@@ -21,21 +25,6 @@
 #include "storage/disk/disk_manager_memory.h"
 
 namespace bustub {
-
-template <typename... Args>
-void LaunchParallelTest(uint64_t num_threads, Args &&...args) {
-  std::vector<std::thread> thread_group;
-
-  // Launch a group of threads
-  for (uint64_t thread_itr = 0; thread_itr < num_threads; ++thread_itr) {
-    thread_group.push_back(std::thread(args..., thread_itr));
-  }
-
-  // Join the threads with the main thread
-  for (uint64_t thread_itr = 0; thread_itr < num_threads; ++thread_itr) {
-    thread_group[thread_itr].join();
-  }
-}
 
 // NOLINTNEXTLINE
 TEST(ExtendibleHTableTest, InsertTest1) {
@@ -175,7 +164,64 @@ TEST(ExtendibleHTableTest, RemoveTest2) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(50, disk_mgr.get());
 
-  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(), 2, 3, 2);
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(), 0, 2, 1);
+
+  ASSERT_TRUE(ht.Insert(0, 0));
+  ASSERT_TRUE(ht.Insert(1, 1));
+  ASSERT_TRUE(ht.Insert(3, 3));
+
+  ht.VerifyIntegrity();
+
+  ASSERT_TRUE(ht.Remove(0));
+  ASSERT_TRUE(ht.Remove(1));
+  ASSERT_TRUE(ht.Remove(3));
+
+  ht.VerifyIntegrity();
+}
+
+TEST(ExtendibleHTableTest, GrowShrinkTest) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(10, disk_mgr.get());
+
+  constexpr uint32_t header_max_depth = 0;
+  constexpr uint32_t directory_max_depth = 4;
+  constexpr uint32_t bucket_max_size = 4;
+
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(),
+                                                      header_max_depth, directory_max_depth, bucket_max_size);
+
+  constexpr int num_keys = (1 << directory_max_depth) * bucket_max_size;
+
+  for (int i = 0; i < num_keys; i++) {
+    ASSERT_TRUE(ht.Insert(i, i));
+  }
+
+  for (int i = num_keys; i < 2 * num_keys; i++) {
+    ASSERT_FALSE(ht.Insert(i, i));
+  }
+
+  ht.VerifyIntegrity();
+
+  for (int i = 0; i < num_keys / 2; i++) {
+    ASSERT_TRUE(ht.Remove(i));
+  }
+
+  ht.VerifyIntegrity();
+
+  for (int i = num_keys / 2; i < num_keys; i++) {
+    std::vector<int> result;
+    ASSERT_TRUE(ht.GetValue(i, &result));
+    ASSERT_EQ(i, result.front());
+    ASSERT_TRUE(ht.Remove(i));
+  }
+
+  // ================ Empty Pages are not recycled correctly ================
+  bpm->free_list_.sort();
+  LOG_DEBUG("======== free list ========");
+  for (auto i : bpm->free_list_) {
+    LOG_DEBUG("%d", i);
+  }
+  LOG_DEBUG("===========================");
 }
 
 }  // namespace bustub
