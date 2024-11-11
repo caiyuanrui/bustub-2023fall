@@ -18,6 +18,9 @@
 // #include "common/util/hash_util.h"
 #include <cstdint>
 #include <functional>
+#include <sstream>
+#include <string>
+#include <thread>
 #include "container/disk/hash/disk_extendible_hash_table.h"
 // #include "storage/index/hash_comparator.h"
 #include "storage/page/extendible_htable_bucket_page.h"
@@ -50,14 +53,16 @@ DiskExtendibleHashTable<K, V, KC>::DiskExtendibleHashTable(const std::string &na
  * SEARCH
  *****************************************************************************/
 template <typename K, typename V, typename KC>
-auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *result,
-                                                 Transaction *transaction) const -> bool {
+auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *result, Transaction *t) const -> bool {
   if (header_page_id_ == INVALID_PAGE_ID) {
-    LOG_WARN("The hash table hasn't initialized yet when calling `GetValue`");
     return false;
   }
 
   auto hash = Hash(key);
+
+  std::ostringstream ss;
+  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
+  LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageRead(header_page_id_);
   auto header = header_guard.template As<ExtendibleHTableHeaderPage>();
@@ -66,7 +71,6 @@ auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *r
   auto directory_page_id = header->GetDirectoryPageId(directory_idx);
 
   if (directory_page_id == INVALID_PAGE_ID) {
-    LOG_DEBUG("Didn't find target directory");
     return false;
   }
 
@@ -105,12 +109,15 @@ template <typename K, typename V, typename KC>
 auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Transaction *transaction) -> bool {
   // Step 0: Check if the extensible hash table is initialized
   if (header_page_id_ == INVALID_PAGE_ID) {
-    LOG_WARN("The hash table hasn't initialized yet when calling `insert`");
     return false;
   }
 
   // Step 1: Get hash value and directory page
   auto hash = Hash(key);
+
+  std::ostringstream ss;
+  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", value = " << value << ", hash = " << hash;
+  LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageWrite(header_page_id_);
   auto header = header_guard.template AsMut<ExtendibleHTableHeaderPage>();
@@ -142,7 +149,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
   // If the key is present
   V v;
   if (bucket->Lookup(key, v, cmp_)) {
-    LOG_WARN("The key has existed so `insert` didn't succeed");
     return false;
   }
 
@@ -157,7 +163,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     // ====================================== BEGIN: Split bucket ======================================
     if (directory->GetGlobalDepth() == directory->GetLocalDepth(bucket_idx)) {
       if (directory->GetGlobalDepth() == directory->GetMaxDepth()) {
-        LOG_WARN("Failed to split the bucket because the directory is already full");
         return false;
       }
       directory->IncrGlobalDepth();
@@ -174,7 +179,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
       auto new_bucket_guard = bpm_->NewPageGuarded(&new_bucket_page_id);
 
       if (new_bucket_page_id == INVALID_PAGE_ID) {
-        LOG_WARN("Failed to create a bucket page");
         return false;
       }
 
@@ -190,9 +194,8 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     // After migiration, if the old bucket is still full, we need to resplit again
     if (bucket->IsFull()) {
       return splite_and_insert();
-    } else {
-      return bucket->Insert(key, value, cmp_);
     }
+    return bucket->Insert(key, value, cmp_);
   };
 
   return splite_and_insert();
@@ -201,43 +204,48 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
 /*****************************************************************************
  * REMOVE
  *****************************************************************************/
+/*
+ * Q: Do we need to delete the empty page when we execute merging?
+ * A: No. The page will be automatically removed by our replacer, and the `delete` will do nothing because the page has
+ * already been pinned.
+ */
 template <typename K, typename V, typename KC>
 auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transaction) -> bool {
   if (header_page_id_ == INVALID_PAGE_ID) {
-    LOG_WARN("The hash table hasn't initialized yet when calling `insert`");
     return false;
   }
 
   auto hash = Hash(key);
+
+  std::ostringstream ss;
+  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
+  LOG_DEBUG("%s", ss.str().c_str());
 
   // The header is read-only, we only merge empty buckets
   auto header_guard = bpm_->FetchPageRead(header_page_id_);
   auto header = header_guard.template As<ExtendibleHTableHeaderPage>();
 
   auto directory_idx = header->HashToDirectoryIndex(hash);
-  auto direcotry_page_id = header->GetDirectoryPageId(directory_idx);
+  auto directory_page_id = header->GetDirectoryPageId(directory_idx);
 
-  if (direcotry_page_id == INVALID_PAGE_ID) {
-    LOG_WARN("Didn't find target directory");
+  if (directory_page_id == INVALID_PAGE_ID) {
     return false;
   }
 
-  auto direcotry_guard = bpm_->FetchPageWrite(direcotry_page_id);
-  auto directory = direcotry_guard.template AsMut<ExtendibleHTableDirectoryPage>();
+  WritePageGuard directory_guard = bpm_->FetchPageWrite(directory_page_id);
+  auto directory = directory_guard.AsMut<ExtendibleHTableDirectoryPage>();
 
   auto bucket_idx = directory->HashToBucketIndex(hash);
   auto bucket_page_id = directory->GetBucketPageId(bucket_idx);
 
   if (bucket_page_id == INVALID_PAGE_ID) {
-    LOG_WARN("Didn't find target bucket");
     return false;
   }
 
-  auto bucket_guard = bpm_->FetchPageWrite(bucket_page_id);
-  auto bucket = bucket_guard.template AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
+  WritePageGuard bucket_guard = bpm_->FetchPageWrite(bucket_page_id);
+  auto bucket = bucket_guard.AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
 
   if (!bucket->Remove(key, cmp_)) {
-    LOG_WARN("Didn't find target key");
     return false;
   }
 
@@ -254,7 +262,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
 
     // You can merge them only when they have the same local depth
     if (directory->GetLocalDepth(bucket_idx) != directory->GetLocalDepth(image_bucket_idx)) {
-      LOG_ERROR("The empty bucket's local depth is not the same as the image's");
       return;
     }
 
@@ -268,13 +275,13 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
     directory->DecrLocalDepth(bucket_idx);
     directory->DecrLocalDepth(image_bucket_idx);
 
-    // Delete the empty page
-    if (!bpm_->DeletePage(bucket_page_id)) {
-      throw Exception("Failed to delete a page even though this page has aquired a writer lock");
-    }
+    // No need to delete the empty page
+    // if (!bpm_->DeletePage(bucket_page_id)) {
+    //   throw Exception("Failed to delete a page even though this page has aquired a writer lock");
+    // }
 
     // Shrink
-    if (directory->CanShrink()) {
+    while (directory->CanShrink()) {
       directory->DecrGlobalDepth();
     }
 
@@ -295,46 +302,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
 
   return true;
 }
-
-/**
- * Provide the empty bucket's id, merge this with its sibling
- * @return bool indicate if this bucket can still be merged
- * true: you can call this func to merge idx
- * false: you can't merge
- */
-// template <typename K, typename V, typename KC>
-// auto DiskExtendibleHashTable<K, V, KC>::MergeEmptyBucket(ExtendibleHTableDirectoryPage *directory,
-//                                                          uint32_t bucket_idx) -> bool {
-//   auto bucket_page_id = directory->GetBucketPageId(bucket_idx);
-//   auto bucket_guard = bpm_->FetchPageRead(bucket_page_id);
-//   auto bucket = bucket_guard.As<ExtendibleHTableBucketPage<K, V, KC>>();
-
-//   if (!bucket->IsEmpty()) {
-//     return false;
-//   }
-
-//   auto image_idx = directory->GetSplitImageIndex(bucket_idx);
-//   auto image_page_id = directory->GetBucketPageId(image_idx);
-
-//   // If the sibling bucket has different depth, you can't merge them, or
-//   // If current bucket has depth = 0
-//   if (directory->GetLocalDepth(bucket_idx) == 0 ||
-//       directory->GetLocalDepth(bucket_idx) != directory->GetLocalDepth(image_idx)) {
-//     return false;
-//   }
-
-//   // Put empty bucket back to the buffer pool
-//   bucket_guard.Drop();
-
-//   // Update directory
-//   directory->SetBucketPageId(bucket_idx, image_page_id);
-//   directory->DecrLocalDepth(bucket_idx);
-//   directory->DecrLocalDepth(image_idx);
-
-//   auto image_guard = bpm_->FetchPageRead(image_page_id);
-//   auto image = image_guard.As<ExtendibleHTableBucketPage<K, V, KC>>();
-//   return image->IsEmpty();
-// }
 
 template <typename K, typename V, typename KC>
 void DiskExtendibleHashTable<K, V, KC>::MigrateEntries(ExtendibleHTableBucketPage<K, V, KC> *old_bucket,
@@ -367,7 +334,6 @@ auto DiskExtendibleHashTable<K, V, KC>::InsertToNewDirectory(ExtendibleHTableHea
   auto direcotry_guard = bpm_->NewPageGuarded(&directory_page_id).UpgradeWrite();
 
   if (directory_page_id == INVALID_PAGE_ID) {
-    LOG_WARN("Failed to create a directory page");
     return false;
   }
 
@@ -391,7 +357,6 @@ auto DiskExtendibleHashTable<K, V, KC>::InsertToNewBucket(ExtendibleHTableDirect
   auto bucket_guard = bpm_->NewPageGuarded(&bucket_page_id);
 
   if (bucket_page_id == INVALID_PAGE_ID) {
-    LOG_WARN("Failed to create a bucket page");
     return false;
   }
 

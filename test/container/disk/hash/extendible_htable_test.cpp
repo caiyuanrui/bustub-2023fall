@@ -214,14 +214,6 @@ TEST(ExtendibleHTableTest, GrowShrinkTest) {
     ASSERT_EQ(i, result.front());
     ASSERT_TRUE(ht.Remove(i));
   }
-
-  // ================ Empty Pages are not recycled correctly ================
-  bpm->free_list_.sort();
-  LOG_DEBUG("======== free list ========");
-  for (auto i : bpm->free_list_) {
-    LOG_DEBUG("%d", i);
-  }
-  LOG_DEBUG("===========================");
 }
 
 }  // namespace bustub

@@ -280,8 +280,8 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
   auto page = this->NewPage(page_id);
   if (page == nullptr) {
-    LOG_ERROR("Failed to create a new page because all frames are pinned");
-    // throw Exception("Failed to create a new page because all frames are pinned");
+    *page_id = INVALID_PAGE_ID;
+    throw Exception("Failed to create a new page because all frames are pinned");
   }
   return {this, page};
 }

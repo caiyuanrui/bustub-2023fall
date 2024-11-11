@@ -12,14 +12,12 @@
 
 #include <cstdio>
 #include <mutex>
-#include <shared_mutex>
 #include <thread>
 #include <vector>
 
 #include "buffer/buffer_pool_manager.h"
 #include "common/config.h"
 #include "common/exception.h"
-#include "fmt/core.h"
 #include "storage/disk/disk_manager_memory.h"
 #include "storage/page/page_guard.h"
 
@@ -134,6 +132,45 @@ TEST(PageGuardTest, BPMTest) {
   }
 
   ASSERT_EQ(100, count);
+}
+
+template <typename F, typename... Args>
+auto Launch(F f, Args... args) {
+  std::thread t(f, args...);
+  return t;
+}
+
+TEST(PageGuardTest, PinCountTest) {
+  const size_t buffer_pool_size = 50;
+  const size_t k = 2;
+
+  auto disk_manager = std::make_shared<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_shared<BufferPoolManager>(buffer_pool_size, disk_manager.get(), k);
+
+  auto CreateNewPage = [](BufferPoolManager *bpm) {
+    page_id_t page_id = INVALID_PAGE_ID;
+    bpm->NewPage(&page_id);
+  };
+
+  // Create a new page with pid = 0
+  auto t = Launch(CreateNewPage, bpm.get());
+  t.join();
+
+  auto FetchPage = [](BufferPoolManager *bpm, page_id_t page_id) {
+    auto guard = bpm->FetchPageWrite(page_id);
+    ASSERT_EQ(1, guard.GetPinCount());
+  };
+
+  int num_threads = 100;
+  std::vector<std::thread> threads;
+
+  for (int i = 0; i < num_threads; i++) {
+    threads.emplace_back(Launch(FetchPage, bpm.get(), 0));
+  }
+
+  for (int i = 0; i < num_threads; i++) {
+    threads[i].join();
+  }
 }
 
 }  // namespace bustub
