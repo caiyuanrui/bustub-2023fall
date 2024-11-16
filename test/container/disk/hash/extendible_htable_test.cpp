@@ -216,4 +216,32 @@ TEST(ExtendibleHTableTest, GrowShrinkTest) {
   }
 }
 
+TEST(ExtendibleHTableTest, RecursiveMergeTest) {
+  auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
+  auto bpm = std::make_unique<BufferPoolManager>(10, disk_mgr.get());
+
+  constexpr uint32_t header_max_depth = 2;
+  constexpr uint32_t directory_max_depth = 5;
+  constexpr uint32_t bucket_max_size = 1;
+
+  DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(),
+                                                      header_max_depth, directory_max_depth, bucket_max_size);
+
+  ht.Insert(4, 0);
+  ht.Insert(5, 0);
+  ht.Insert(6, 0);
+  ht.Insert(14, 0);
+
+  ht.PrintHT();
+
+  ht.VerifyIntegrity();
+
+  ht.Remove(5);
+  ht.Remove(14);
+  ht.Remove(4);
+
+  ht.PrintHT();
+  ht.VerifyIntegrity();
+}
+
 }  // namespace bustub
