@@ -66,9 +66,9 @@ auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *r
 
   auto hash = Hash(key);
 
-  // std::ostringstream ss;
-  // ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
-  // LOG_DEBUG("%s", ss.str().c_str());
+  std::ostringstream ss;
+  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
+  LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageRead(header_page_id_);
   auto header = header_guard.template As<ExtendibleHTableHeaderPage>();
@@ -113,12 +113,10 @@ auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *r
  *****************************************************************************/
 template <typename K, typename V, typename KC>
 auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Transaction *transaction) -> bool {
-  // Step 0: Check if the extensible hash table is initialized
   if (header_page_id_ == INVALID_PAGE_ID) {
     return false;
   }
 
-  // Step 1: Get hash value and directory page
   auto hash = Hash(key);
 
   std::ostringstream ss;
@@ -131,16 +129,13 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
   auto directory_idx = header->HashToDirectoryIndex(hash);
   auto directory_page_id = header->GetDirectoryPageId(directory_idx);
 
-  // If directory page doesn't exist, create it
   if (directory_page_id == INVALID_PAGE_ID) {
     return InsertToNewDirectory(header, directory_idx, hash, key, value);
   }
 
-  // Fetch directory page
   WritePageGuard directory_guard = bpm_->FetchPageWrite(directory_page_id);
   auto directory = directory_guard.AsMut<ExtendibleHTableDirectoryPage>();
 
-  // Step 2: Get according bucket
   auto bucket_idx = directory->HashToBucketIndex(hash);
   auto bucket_page_id = directory->GetBucketPageId(bucket_idx);
 
@@ -152,59 +147,37 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
   WritePageGuard bucket_guard = bpm_->FetchPageWrite(bucket_page_id);
   auto bucket = bucket_guard.AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
 
-  // If the key is present
   V v;
   if (bucket->Lookup(key, v, cmp_)) {
     return false;
   }
 
-  if (!bucket->IsFull()) {
-    return bucket->Insert(key, value, cmp_);
-  }
+  while (bucket->IsFull()) {
+    if (directory->GetMaxDepth() == directory->GetLocalDepth(bucket_idx)) {
+      return false;
+    }
 
-  // Step 3: insert key-value pair into the bucket
-  std::function<bool()> splite_and_insert = [this, &hash, &directory, &bucket, &key, &value, &splite_and_insert] {
-    auto bucket_idx = directory->HashToBucketIndex(hash);
+    auto new_bucket_page_id = INVALID_PAGE_ID;
+    auto new_bucket_guard = bpm_->NewPageGuarded(&new_bucket_page_id).UpgradeWrite();
+    if (new_bucket_page_id == INVALID_PAGE_ID) {
+      return false;
+    }
+    auto new_bucket = new_bucket_guard.template AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
+    new_bucket->Init(bucket_max_size_);
 
-    // ====================================== BEGIN: Split bucket ======================================
     if (directory->GetGlobalDepth() == directory->GetLocalDepth(bucket_idx)) {
-      if (directory->GetGlobalDepth() == directory->GetMaxDepth()) {
-        return false;
-      }
       directory->IncrGlobalDepth();
-      // You need to recalculate the index because of the change in the global depth
       bucket_idx = directory->HashToBucketIndex(hash);
     }
 
-    // Notice the order when calling `IncrLocalDepth` and `GetSplitImageIndex`
     directory->IncrLocalDepth(bucket_idx);
     auto new_bucket_idx = directory->GetSplitImageIndex(bucket_idx);
-    page_id_t new_bucket_page_id = INVALID_PAGE_ID;
+    directory->SetBucketPageId(new_bucket_idx, new_bucket_page_id);
 
-    {
-      auto new_bucket_guard = bpm_->NewPageGuarded(&new_bucket_page_id);
+    MigrateEntries(bucket, new_bucket, new_bucket_idx, directory->GetGlobalDepthMask());
+  }
 
-      if (new_bucket_page_id == INVALID_PAGE_ID) {
-        return false;
-      }
-
-      auto new_bucket = new_bucket_guard.AsMut<ExtendibleHTableBucketPage<K, V, KC>>();
-      new_bucket->Init(bucket_max_size_);
-
-      directory->SetBucketPageId(new_bucket_idx, new_bucket_page_id);
-
-      MigrateEntries(bucket, new_bucket, new_bucket_idx, directory->GetLocalDepthMask(new_bucket_idx));
-    }  // new_bucket_guard will drop at thisl line
-    // ============================================== END ==============================================
-
-    // After migiration, if the old bucket is still full, we need to resplit again
-    if (bucket->IsFull()) {
-      return splite_and_insert();
-    }
-    return bucket->Insert(key, value, cmp_);
-  };
-
-  return splite_and_insert();
+  return bucket->Insert(key, value, cmp_);
 }
 
 /*****************************************************************************
@@ -239,13 +212,6 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
 
   // header has been dropped, you shouldn't use it in the remaining code
   header_guard.Drop();
-
-  // {
-  //   std::ostringstream ss;
-  //   ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash
-  //      << ", dpid = " << directory_page_id;
-  //   LOG_DEBUG("%s", ss.str().c_str());
-  // }
 
   auto directory_guard = bpm_->FetchPageWrite(directory_page_id);
   auto directory = directory_guard.template AsMut<ExtendibleHTableDirectoryPage>();
