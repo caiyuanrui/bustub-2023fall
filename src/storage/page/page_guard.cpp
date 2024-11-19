@@ -97,11 +97,10 @@ void WritePageGuard::Drop() {
     }
 
     guard_.page_->WUnlatch();
-
-    guard_.bpm_ = nullptr;
-    guard_.page_ = nullptr;
-    guard_.is_dirty_ = false;
   }
+  guard_.bpm_ = nullptr;
+  guard_.page_ = nullptr;
+  guard_.is_dirty_ = false;
 }
 
 WritePageGuard::~WritePageGuard() { Drop(); }  // NOLINT

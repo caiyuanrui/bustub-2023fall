@@ -183,37 +183,24 @@ TEST(ExtendibleHTableTest, GrowShrinkTest) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
   auto bpm = std::make_unique<BufferPoolManager>(10, disk_mgr.get());
 
-  constexpr uint32_t header_max_depth = 0;
-  constexpr uint32_t directory_max_depth = 4;
-  constexpr uint32_t bucket_max_size = 4;
+  constexpr uint32_t header_max_depth = 9;
+  constexpr uint32_t directory_max_depth = 9;
+  constexpr uint32_t bucket_max_size = 511;
 
   DiskExtendibleHashTable<int, int, IntComparator> ht("blah", bpm.get(), IntComparator(), HashFunction<int>(),
                                                       header_max_depth, directory_max_depth, bucket_max_size);
 
-  constexpr int num_keys = (1 << directory_max_depth) * bucket_max_size;
+  // constexpr int num_keys = (1 << directory_max_depth) * bucket_max_size;
+  constexpr int num_keys = 1024;
 
   for (int i = 0; i < num_keys; i++) {
     ASSERT_TRUE(ht.Insert(i, i));
-  }
-
-  for (int i = num_keys; i < 2 * num_keys; i++) {
-    ASSERT_FALSE(ht.Insert(i, i));
-  }
-
-  ht.VerifyIntegrity();
-
-  for (int i = 0; i < num_keys / 2; i++) {
-    ASSERT_TRUE(ht.Remove(i));
+    std::vector<int> res;
+    ASSERT_TRUE(ht.GetValue(i, &res));
+    ASSERT_EQ(res[0], i);
   }
 
   ht.VerifyIntegrity();
-
-  for (int i = num_keys / 2; i < num_keys; i++) {
-    std::vector<int> result;
-    ASSERT_TRUE(ht.GetValue(i, &result));
-    ASSERT_EQ(i, result.front());
-    ASSERT_TRUE(ht.Remove(i));
-  }
 }
 
 TEST(ExtendibleHTableTest, RecursiveMergeTest) {

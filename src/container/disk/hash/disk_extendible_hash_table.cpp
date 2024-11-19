@@ -17,7 +17,6 @@
 #include "common/rid.h"
 // #include "common/util/hash_util.h"
 #include <cstdint>
-#include <functional>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -329,7 +328,7 @@ auto DiskExtendibleHashTable<K, V, KC>::InsertToNewBucket(ExtendibleHTableDirect
                                                           const K &key, const V &value) -> bool {
   // Step 1: Create a new bucket page
   page_id_t bucket_page_id = INVALID_PAGE_ID;
-  auto bucket_guard = bpm_->NewPageGuarded(&bucket_page_id);
+  auto bucket_guard = bpm_->NewPageGuarded(&bucket_page_id).UpgradeWrite();
 
   if (bucket_page_id == INVALID_PAGE_ID) {
     return false;
