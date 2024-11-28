@@ -151,6 +151,8 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
     return false;
   }
 
+  header_guard.Drop();
+
   while (bucket->IsFull()) {
     if (directory->GetMaxDepth() == directory->GetLocalDepth(bucket_idx)) {
       return false;

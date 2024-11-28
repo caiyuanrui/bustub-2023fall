@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager.h"
+#include <cstddef>
 #include <future>
 #include <mutex>
 #include <utility>
@@ -37,6 +38,8 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
 
+  LOG_DEBUG("pool_size: %zu, replacer_k: %zu", pool_size, replacer_k);
+
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
@@ -57,6 +60,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
     page = &pages_[frame_id];
   } else {
     if (!replacer_->Evict(&frame_id)) {
+      LOG_DEBUG("Failed to evict a page");
       page_id = nullptr;
       return nullptr;
     }
@@ -120,6 +124,14 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType
     page = &pages_[frame_id];
   } else {
     if (!replacer_->Evict(&frame_id)) {
+      int cnt = 0;
+      for (size_t i = 0; i < pool_size_; i++) {
+        if (pages_[i].pin_count_ > 0) {
+          cnt++;
+        }
+      }
+      LOG_DEBUG("Failed to evict a page, pin cnt: %d", cnt);
+
       return nullptr;
     }
 
@@ -278,6 +290,15 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 }
 
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
+  size_t cnt = 0;
+  for (size_t i = 0; i < pool_size_; i++) {
+    auto &page = pages_[i];
+    if (page.GetPinCount() > 0) {
+      cnt++;
+    }
+  }
+  LOG_DEBUG("pin cnt: %zu", cnt);
+
   auto page = this->NewPage(page_id);
   if (page == nullptr) {
     throw Exception("Failed to create a new page because all frames are pinned");

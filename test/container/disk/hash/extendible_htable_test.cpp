@@ -10,8 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <thread>  // NOLINT
@@ -181,7 +179,7 @@ TEST(ExtendibleHTableTest, RemoveTest2) {
 
 TEST(ExtendibleHTableTest, GrowShrinkTest) {
   auto disk_mgr = std::make_unique<DiskManagerUnlimitedMemory>();
-  auto bpm = std::make_unique<BufferPoolManager>(10, disk_mgr.get());
+  auto bpm = std::make_unique<BufferPoolManager>(3, disk_mgr.get());
 
   constexpr uint32_t header_max_depth = 9;
   constexpr uint32_t directory_max_depth = 9;
