@@ -38,7 +38,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
 
-  LOG_DEBUG("pool_size: %zu, replacer_k: %zu", pool_size, replacer_k);
+  // LOG_DEBUG("pool_size: %zu, replacer_k: %zu", pool_size, replacer_k);
 
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
@@ -290,14 +290,14 @@ auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
 }
 
 auto BufferPoolManager::NewPageGuarded(page_id_t *page_id) -> BasicPageGuard {
-  size_t cnt = 0;
-  for (size_t i = 0; i < pool_size_; i++) {
-    auto &page = pages_[i];
-    if (page.GetPinCount() > 0) {
-      cnt++;
-    }
-  }
-  LOG_DEBUG("pin cnt: %zu", cnt);
+  // size_t cnt = 0;
+  // for (size_t i = 0; i < pool_size_; i++) {
+  //   auto &page = pages_[i];
+  //   if (page.GetPinCount() > 0) {
+  //     cnt++;
+  //   }
+  // }
+  // LOG_DEBUG("pin cnt: %zu", cnt);
 
   auto page = this->NewPage(page_id);
   if (page == nullptr) {
