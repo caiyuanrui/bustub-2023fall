@@ -12,12 +12,14 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/insert_plan.h"
+#include "storage/table/table_iterator.h"
 #include "storage/table/tuple.h"
 
 namespace bustub {
@@ -57,6 +59,8 @@ class InsertExecutor : public AbstractExecutor {
  private:
   /** The insert plan node to be executed*/
   const InsertPlanNode *plan_;
+  std::unique_ptr<AbstractExecutor> child_executor_;
+  bool has_returned_ = false;
 };
 
 }  // namespace bustub
