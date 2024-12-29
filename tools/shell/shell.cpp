@@ -1,12 +1,15 @@
+#include <execinfo.h>
+#include <signal.h>
+#include <unistd.h>
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 #include <string>
-#include "binder/binder.h"
 #include "common/bustub_instance.h"
 #include "common/exception.h"
 #include "common/util/string_util.h"
 #include "concurrency/transaction.h"
 #include "fmt/core.h"
-#include "libfort/lib/fort.hpp"
 #include "linenoise/linenoise.h"
 #include "utf8proc/utf8proc.h"
 
@@ -25,8 +28,24 @@ auto GetWidthOfUtf8(const void *beg, const void *end, size_t *width) -> int {
   return 0;
 }
 
+void PrintStackTrace() {
+  void *array[100];                     // 存储调用栈的指针
+  size_t size = backtrace(array, 100);  // 获取调用栈
+  fprintf(stderr, "Error: signal received. Stack trace:\n");
+  backtrace_symbols_fd(array, size, STDERR_FILENO);  // 打印调用栈符号
+}
+
+void SignalHandler(int signal) {
+  fprintf(stderr, "Signal %d received.\n", signal);
+  PrintStackTrace();
+  exit(1);
+}
+
 // NOLINTNEXTLINE
 auto main(int argc, char **argv) -> int {
+  signal(SIGSEGV, SignalHandler);  // 捕获 SIGSEGV 信号
+  signal(SIGABRT, SignalHandler);  // 捕获 SIGABRT 信号
+
   ft_set_u8strwid_func(&GetWidthOfUtf8);
 
   auto bustub = std::make_unique<bustub::BustubInstance>("test.db");

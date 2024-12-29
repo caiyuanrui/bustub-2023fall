@@ -25,40 +25,36 @@ namespace bustub {
 InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
                                std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {
-  auto catalog = exec_ctx_->GetCatalog();
+  this->catalog_ = exec_ctx_->GetCatalog();
   auto table_oid = plan_->GetTableOid();
-  auto table_info = catalog->GetTable(table_oid);
+  this->table_info_ = this->catalog_->GetTable(table_oid);
 
-  if (table_info == nullptr) {
+  if (this->table_info_ == nullptr) {
     throw bustub::Exception("InsertExecutor: Table not found");
   }
 }
 
 void InsertExecutor::Init() {
-  if (child_executor_ != nullptr) {
-    child_executor_->Init();
-  }
+  BUSTUB_ASSERT(this->child_executor_ != nullptr, "InsertExecutor: Child executor is nullptr");
+  child_executor_->Init();
   has_returned_ = false;
 }
 
 auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
-  BUSTUB_ASSERT(tuple != nullptr, "tuple is nullptr");
-  BUSTUB_ASSERT(rid != nullptr, "rid is nullptr");
+  BUSTUB_ASSERT(tuple != nullptr, "InsertExecutor: Tuple is nullptr");
+  BUSTUB_ASSERT(rid != nullptr, "InsertExecutor: Rid is nullptr");
 
   if (this->has_returned_ || this->child_executor_ == nullptr) {
     return false;
   }
 
-  auto catalog = this->exec_ctx_->GetCatalog();
-  auto table_oid = this->plan_->GetTableOid();
-  auto table_info = catalog->GetTable(table_oid);
-  if (table_info == Catalog::NULL_TABLE_INFO) {
+  if (this->table_info_ == Catalog::NULL_TABLE_INFO) {
     throw bustub::Exception("InsertExecutor: Table not found");
   }
 
-  auto table_name = table_info->name_;
-  auto index_info = catalog->GetTableIndexes(table_name);
-  auto table = table_info->table_.get();
+  auto table_name = this->table_info_->name_;
+  auto index_info = this->catalog_->GetTableIndexes(table_name);
+  auto table = this->table_info_->table_.get();
 
   int tuples_inserted = 0;
 
@@ -69,7 +65,7 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
 
     for (IndexInfo *index : index_info) {
-      auto key = tuple->KeyFromTuple(table_info->schema_, index->key_schema_, index->index_->GetKeyAttrs());
+      auto key = tuple->KeyFromTuple(this->table_info_->schema_, index->key_schema_, index->index_->GetKeyAttrs());
       index->index_->InsertEntry(key, *rid, exec_ctx_->GetTransaction());
     }
 

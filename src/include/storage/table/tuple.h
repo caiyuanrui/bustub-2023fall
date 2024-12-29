@@ -24,7 +24,6 @@ namespace bustub {
 
 using timestamp_t = int64_t;
 const timestamp_t INVALID_TS = -1;
-
 static constexpr size_t TUPLE_META_SIZE = 16;
 
 struct TupleMeta {
