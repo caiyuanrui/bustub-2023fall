@@ -13,14 +13,11 @@
 #pragma once
 
 #include <memory>
-#include <utility>
-#include <vector>
 
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/update_plan.h"
 #include "storage/table/tuple.h"
-#include "type/value_factory.h"
 
 namespace bustub {
 
@@ -67,6 +64,6 @@ class UpdateExecutor : public AbstractExecutor {
   /** The child executor to obtain value from */
   std::unique_ptr<AbstractExecutor> child_executor_;
 
-  bool has_returned_ = true;
+  bool has_called_{true};
 };
 }  // namespace bustub

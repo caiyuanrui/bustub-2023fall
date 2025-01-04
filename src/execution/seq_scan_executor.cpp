@@ -37,7 +37,6 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
 
     if (this->plan_->filter_predicate_ != nullptr) {
       auto value = this->plan_->filter_predicate_->Evaluate(&tuple_temp, this->plan_->OutputSchema());
-      // How to use value join?
       if (!value.GetAs<bool>()) {
         ++*this->table_iter_;
         continue;
