@@ -25,18 +25,19 @@ DeleteExecutor::DeleteExecutor(ExecutorContext *exec_ctx, const DeletePlanNode *
     : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
 void DeleteExecutor::Init() {
-  BUSTUB_ASSERT(this->child_executor_ != nullptr, "DeleteExecutor: Child executor is nullptr");
   this->child_executor_->Init();
-  this->has_returned_ = false;
+  this->has_called_ = false;
 }
 
 auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
-  if (this->has_returned_) {
+  if (this->has_called_) {
     return false;
   }
 
+  this->has_called_ = true;
+
   auto table_info = this->exec_ctx_->GetCatalog()->GetTable(this->plan_->GetTableOid());
-  auto index_info = this->exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
+  auto index_infos = this->exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_);
 
   Tuple old_tuple;
   RID old_rid;
@@ -49,7 +50,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
     table_info->table_->UpdateTupleMeta(TupleMeta{0, true}, old_rid);
 
     // Update indexes
-    for (IndexInfo *index : index_info) {
+    for (auto index : index_infos) {
       auto key = old_tuple.KeyFromTuple(table_info->schema_, index->key_schema_, index->index_->GetKeyAttrs());
       index->index_->DeleteEntry(key, old_rid, exec_ctx_->GetTransaction());
     }
@@ -59,9 +60,7 @@ auto DeleteExecutor::Next([[maybe_unused]] Tuple *tuple, RID *rid) -> bool {
 
   // Return the number of rows deleted as output tuple
   *tuple = Tuple{{Value{TypeId::INTEGER, num_rows_deleted}}, &this->GetOutputSchema()};
-  this->has_returned_ = true;
-
-  return num_rows_deleted > 0;
+  return true;
 }
 
 }  // namespace bustub
