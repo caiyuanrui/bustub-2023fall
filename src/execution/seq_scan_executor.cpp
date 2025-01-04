@@ -13,7 +13,6 @@
 #include "execution/executors/seq_scan_executor.h"
 #include <memory>
 #include "catalog/catalog.h"
-#include "common/logger.h"
 #include "common/macros.h"
 #include "storage/table/table_iterator.h"
 
@@ -32,9 +31,18 @@ auto SeqScanExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   BUSTUB_ASSERT(this->table_iter_ != nullptr, "You should call Init method first before Next method gets called");
 
   while (!this->table_iter_->IsEnd()) {
-    BUSTUB_ASSERT(this->plan_->filter_predicate_ == nullptr, "Filter predicate in seqscan is not implementedyet!");
+    // BUSTUB_ASSERT(this->plan_->filter_predicate_ == nullptr, "Filter predicate in seqscan is not implementedyet!");
 
     auto [tuple_meta_temp, tuple_temp] = this->table_iter_->GetTuple();
+
+    if (this->plan_->filter_predicate_ != nullptr) {
+      auto value = this->plan_->filter_predicate_->Evaluate(&tuple_temp, this->plan_->OutputSchema());
+      // How to use value join?
+      if (!value.GetAs<bool>()) {
+        ++*this->table_iter_;
+        continue;
+      }
+    }
 
     if (!tuple_meta_temp.is_deleted_) {
       *tuple = tuple_temp;
