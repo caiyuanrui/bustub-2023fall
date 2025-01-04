@@ -10,6 +10,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "storage/table/table_iterator.h"
 #include <cassert>
 #include <optional>
 
