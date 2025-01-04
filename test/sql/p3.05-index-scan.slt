@@ -84,6 +84,17 @@ select * from t1 where v1 = 8;
 ----
 8 -20 645
 
+query
+select * from t1;
+----
+1 50 645 
+4 20 445 
+5 10 445 
+3 30 645 
+6 0 721 
+7 -10 645 
+8 -20 645
+
 query +ensure:index_scan
 select * from t1 where v1 = 2;
 ----

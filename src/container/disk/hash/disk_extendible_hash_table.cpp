@@ -48,10 +48,10 @@ DiskExtendibleHashTable<K, V, KC>::DiskExtendibleHashTable(const std::string &na
   }
   header_guard.template AsMut<ExtendibleHTableHeaderPage>()->Init(header_max_depth_);
 
-  std::ostringstream ss;
-  ss << '[' << std::this_thread::get_id() << ']' << " header_max_depth = " << header_max_depth_
-     << ", directory_max_depth = " << directory_max_depth_ << ", bucket_max_size = " << bucket_max_size_;
-  LOG_DEBUG("%s", ss.str().c_str());
+  // std::ostringstream ss;
+  // ss << '[' << std::this_thread::get_id() << ']' << " header_max_depth = " << header_max_depth_
+  //    << ", directory_max_depth = " << directory_max_depth_ << ", bucket_max_size = " << bucket_max_size_;
+  // LOG_DEBUG("%s", ss.str().c_str());
 }
 
 /*****************************************************************************
@@ -65,9 +65,9 @@ auto DiskExtendibleHashTable<K, V, KC>::GetValue(const K &key, std::vector<V> *r
 
   auto hash = Hash(key);
 
-  std::ostringstream ss;
-  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
-  LOG_DEBUG("%s", ss.str().c_str());
+  // std::ostringstream ss;
+  // ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
+  // LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageRead(header_page_id_);
   auto header = header_guard.template As<ExtendibleHTableHeaderPage>();
@@ -118,9 +118,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Insert(const K &key, const V &value, Tra
 
   auto hash = Hash(key);
 
-  std::ostringstream ss;
-  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", value = " << value << ", hash = " << hash;
-  LOG_DEBUG("%s", ss.str().c_str());
+  // std::ostringstream ss;
+  // ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", value = " << value << ", hash = " << hash;
+  // LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageWrite(header_page_id_);
   auto header = header_guard.template AsMut<ExtendibleHTableHeaderPage>();
@@ -197,9 +197,9 @@ auto DiskExtendibleHashTable<K, V, KC>::Remove(const K &key, Transaction *transa
 
   auto hash = Hash(key);
 
-  std::ostringstream ss;
-  ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
-  LOG_DEBUG("%s", ss.str().c_str());
+  // std::ostringstream ss;
+  // ss << '[' << std::this_thread::get_id() << ']' << " key = " << key << ", hash = " << hash;
+  // LOG_DEBUG("%s", ss.str().c_str());
 
   auto header_guard = bpm_->FetchPageWrite(header_page_id_);
   auto header = header_guard.template AsMut<ExtendibleHTableHeaderPage>();

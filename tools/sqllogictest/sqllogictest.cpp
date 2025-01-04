@@ -1,3 +1,5 @@
+#include <execinfo.h>
+#include <unistd.h>
 #include <cstdio>
 #include <fstream>
 #include <ios>
@@ -186,7 +188,23 @@ auto ProcessExtraOptions(const std::string &sql, bustub::BustubInstance &instanc
   return true;
 }
 
+void PrintStackTrace() {
+  void *array[100];                     // 存储调用栈的指针
+  size_t size = backtrace(array, 100);  // 获取调用栈
+  fprintf(stderr, "Error: signal received. Stack trace:\n");
+  backtrace_symbols_fd(array, size, STDERR_FILENO);  // 打印调用栈符号
+}
+
+void SignalHandler(int signal) {
+  fprintf(stderr, "Signal %d received.\n", signal);
+  PrintStackTrace();
+  exit(1);
+}
+
 auto main(int argc, char **argv) -> int {  // NOLINT
+  signal(SIGSEGV, SignalHandler);          // 捕获 SIGSEGV 信号
+  signal(SIGABRT, SignalHandler);          // 捕获 SIGABRT 信号
+
   argparse::ArgumentParser program("bustub-sqllogictest");
   program.add_argument("file").help("the sqllogictest file to run");
   program.add_argument("--verbose").help("increase output verbosity").default_value(false).implicit_value(true);
