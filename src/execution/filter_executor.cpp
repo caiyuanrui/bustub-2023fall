@@ -1,6 +1,4 @@
 #include "execution/executors/filter_executor.h"
-#include "common/exception.h"
-#include "type/value_factory.h"
 
 namespace bustub {
 

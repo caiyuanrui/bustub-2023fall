@@ -1,16 +1,12 @@
 #include <algorithm>
-#include <cstdio>
 #include <memory>
 #include <vector>
 #include "binder/tokens.h"
 #include "common/macros.h"
 #include "execution/expressions/abstract_expression.h"
-#include "execution/expressions/arithmetic_expression.h"
 #include "execution/expressions/column_value_expression.h"
 #include "execution/expressions/comparison_expression.h"
 #include "execution/expressions/constant_value_expression.h"
-#include "execution/expressions/logic_expression.h"
-#include "execution/expressions/string_expression.h"
 #include "execution/plans/abstract_plan.h"
 #include "execution/plans/index_scan_plan.h"
 #include "execution/plans/seq_scan_plan.h"
