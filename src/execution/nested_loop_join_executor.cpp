@@ -44,7 +44,7 @@ auto NestedLoopJoinExecutor::Next(Tuple *tuple, RID *rid [[maybe_unused]]) -> bo
     case JoinType::LEFT:
       return LeftNext(tuple, rid);
     default:
-      throw Exception("bustub (2023fall) only supports inner join and left join");
+      throw NotImplementedException(fmt::format("join type {} not supported", plan_->GetJoinType()));
   }
 }
 
@@ -120,7 +120,7 @@ auto NestedLoopJoinExecutor::LeftNext(Tuple *tuple, RID *rid [[maybe_unused]]) -
           values.push_back(left_tuple.GetValue(&left_schema, left_schema.GetColIdx(column.GetName())));
         }
         for (const auto &column : right_schema.GetColumns()) {
-          values.push_back(Value{column.GetType()}.OperateNull(Value{column.GetType()}));
+          values.push_back(Type::GenerateNullValue(column.GetType()));
         }
         *tuple = Tuple{values, &GetOutputSchema()};
         return true;

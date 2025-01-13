@@ -16,8 +16,10 @@
 #include "type/boolean_type.h"
 #include "type/decimal_type.h"
 #include "type/integer_type.h"
+#include "type/limits.h"
 #include "type/smallint_type.h"
 #include "type/tinyint_type.h"
+#include "type/type_id.h"
 #include "type/value.h"
 #include "type/varlen_type.h"
 
@@ -168,18 +170,42 @@ auto Type::GetMaxValue(TypeId type_id) -> Value {
   throw Exception(ExceptionType::MISMATCH_TYPE, "Cannot get max value.");
 }
 
-auto Type::CompareEquals(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> CmpBool {
+auto Type::GenerateNullValue(TypeId type_id) -> Value {
+  switch (type_id) {
+    case INVALID:
+      throw NotImplementedException("INVALID's NULL value is not implemented.");
+    case BOOLEAN:
+      return {type_id, BUSTUB_BOOLEAN_NULL};
+    case TINYINT:
+      return {type_id, BUSTUB_INT8_NULL};
+    case SMALLINT:
+      return {type_id, BUSTUB_INT16_NULL};
+    case INTEGER:
+      return {type_id, BUSTUB_INT32_NULL};
+    case BIGINT:
+      return {type_id, BUSTUB_INT64_NULL};
+    case DECIMAL:
+      return {type_id, BUSTUB_DECIMAL_NULL};
+    case VARCHAR:
+      throw NotImplementedException("VARCHAR's NULL value is not implemented.");
+      return {type_id, nullptr, 0, false};
+    case TIMESTAMP:
+      return {type_id, BUSTUB_TIMESTAMP_NULL};
+  }
+}
+
+auto Type::CompareEquals(const Value &left __attribute__((unused)),
+                         const Value &right __attribute__((unused))) const -> CmpBool {
   throw NotImplementedException("CompareEquals not implemented");
 }
 
-auto Type::CompareNotEquals(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> CmpBool {
+auto Type::CompareNotEquals(const Value &left __attribute__((unused)),
+                            const Value &right __attribute__((unused))) const -> CmpBool {
   throw NotImplementedException("CompareNotEquals not implemented");
 }
 
-auto Type::CompareLessThan(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> CmpBool {
+auto Type::CompareLessThan(const Value &left __attribute__((unused)),
+                           const Value &right __attribute__((unused))) const -> CmpBool {
   throw NotImplementedException("CompareLessThan not implemented");
 }
 auto Type::CompareLessThanEquals(const Value &left __attribute__((unused)),
@@ -200,23 +226,23 @@ auto Type::Add(const Value &left __attribute__((unused)), const Value &right __a
   throw NotImplementedException("Add not implemented");
 }
 
-auto Type::Subtract(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> Value {
+auto Type::Subtract(const Value &left __attribute__((unused)),
+                    const Value &right __attribute__((unused))) const -> Value {
   throw NotImplementedException("Subtract not implemented");
 }
 
-auto Type::Multiply(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> Value {
+auto Type::Multiply(const Value &left __attribute__((unused)),
+                    const Value &right __attribute__((unused))) const -> Value {
   throw NotImplementedException("Multiply not implemented");
 }
 
-auto Type::Divide(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> Value {
+auto Type::Divide(const Value &left __attribute__((unused)),
+                  const Value &right __attribute__((unused))) const -> Value {
   throw NotImplementedException("Divide not implemented");
 }
 
-auto Type::Modulo(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> Value {
+auto Type::Modulo(const Value &left __attribute__((unused)),
+                  const Value &right __attribute__((unused))) const -> Value {
   throw NotImplementedException("Modulo not implemented");
 }
 
@@ -232,8 +258,8 @@ auto Type::Sqrt(const Value &val __attribute__((unused))) const -> Value {
   throw NotImplementedException("Sqrt not implemented");
 }
 
-auto Type::OperateNull(const Value &val __attribute__((unused)), const Value &right __attribute__((unused))) const
-    -> Value {
+auto Type::OperateNull(const Value &val __attribute__((unused)),
+                       const Value &right __attribute__((unused))) const -> Value {
   throw NotImplementedException("OperateNull not implemented");
 }
 
@@ -270,8 +296,8 @@ auto Type::Copy(const Value &val __attribute__((unused))) const -> Value {
   throw NotImplementedException("Copy not implemented");
 }
 
-auto Type::CastAs(const Value &val __attribute__((unused)), const TypeId type_id __attribute__((unused))) const
-    -> Value {
+auto Type::CastAs(const Value &val __attribute__((unused)),
+                  const TypeId type_id __attribute__((unused))) const -> Value {
   throw NotImplementedException("CastAs not implemented");
 }
 

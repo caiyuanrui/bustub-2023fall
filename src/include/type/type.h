@@ -44,6 +44,8 @@ class Type {
 
   inline auto GetTypeId() const -> TypeId { return type_id_; }
 
+  static auto GenerateNullValue(TypeId type_id) -> Value;
+
   // Comparison functions
   //
   // NOTE:
