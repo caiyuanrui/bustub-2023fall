@@ -66,7 +66,7 @@ class TopNExecutor : public AbstractExecutor {
  private:
   // return v1 > v2: min heap
   // return v1 < v2: max heap
-  auto Compare_(const Tuple &t1, const Tuple &t2) const -> bool {
+  auto Compare(const Tuple &t1, const Tuple &t2) const -> bool {
     for (const auto &[type, expr] : plan_->GetOrderBy()) {
       auto v1 = expr->Evaluate(&t1, GetOutputSchema());
       auto v2 = expr->Evaluate(&t2, GetOutputSchema());
@@ -75,7 +75,7 @@ class TopNExecutor : public AbstractExecutor {
         return type == OrderByType::ASC || type == OrderByType::DEFAULT;
       }
       // min-heap
-      else if (v1.CompareGreaterThan(v2) == CmpBool::CmpTrue) {
+      if (v1.CompareGreaterThan(v2) == CmpBool::CmpTrue) {
         return type == OrderByType::DESC;
       }
     }

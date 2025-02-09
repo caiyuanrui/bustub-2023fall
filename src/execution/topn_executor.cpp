@@ -12,7 +12,7 @@ TopNExecutor::TopNExecutor(ExecutorContext *exec_ctx, const TopNPlanNode *plan,
       plan_(plan),
       child_executor_(std::move(child_executor)),
       cmp_([this](const Tuple &t1, const Tuple &t2) {
-        return Compare_(t1, t2);
+        return Compare(t1, t2);
       }) {}
 
 void TopNExecutor::Init() {

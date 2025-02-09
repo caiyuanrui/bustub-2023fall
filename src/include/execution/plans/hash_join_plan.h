@@ -55,10 +55,13 @@ class HashJoinPlanNode : public AbstractPlanNode {
    * @param left_key_expression The expression for the left JOIN key
    * @param right_key_expression The expression for the right JOIN key
    */
-  HashJoinPlanNode(SchemaRef output_schema, AbstractPlanNodeRef left, AbstractPlanNodeRef right,
+  HashJoinPlanNode(SchemaRef output_schema, AbstractPlanNodeRef left,
+                   AbstractPlanNodeRef right,
                    std::vector<AbstractExpressionRef> left_key_expressions,
-                   std::vector<AbstractExpressionRef> right_key_expressions, JoinType join_type)
-      : AbstractPlanNode(std::move(output_schema), {std::move(left), std::move(right)}),
+                   std::vector<AbstractExpressionRef> right_key_expressions,
+                   JoinType join_type)
+      : AbstractPlanNode(std::move(output_schema),
+                         {std::move(left), std::move(right)}),
         left_key_expressions_{std::move(left_key_expressions)},
         right_key_expressions_{std::move(right_key_expressions)},
         join_type_(join_type) {}
@@ -67,15 +70,22 @@ class HashJoinPlanNode : public AbstractPlanNode {
   auto GetType() const -> PlanType override { return PlanType::HashJoin; }
 
   /** @return The expression to compute the left join key */
-  auto LeftJoinKeyExpressions() const -> const std::vector<AbstractExpressionRef> & { return left_key_expressions_; }
+  auto LeftJoinKeyExpressions() const
+      -> const std::vector<AbstractExpressionRef> & {
+    return left_key_expressions_;
+  }
 
   /** @return The expression to compute the right join key */
-  auto RightJoinKeyExpressions() const -> const std::vector<AbstractExpressionRef> & { return right_key_expressions_; }
+  auto RightJoinKeyExpressions() const
+      -> const std::vector<AbstractExpressionRef> & {
+    return right_key_expressions_;
+  }
 
   auto GetLeftJoinKey(const Tuple &tuple) const -> HashJoinKey {
     HashJoinKey hj_key;
     for (const auto &expr : left_key_expressions_) {
-      hj_key.keys_.push_back(expr->Evaluate(&tuple, GetLeftPlan()->OutputSchema()));
+      hj_key.keys_.push_back(
+          expr->Evaluate(&tuple, GetLeftPlan()->OutputSchema()));
     }
     return hj_key;
   }
@@ -83,20 +93,23 @@ class HashJoinPlanNode : public AbstractPlanNode {
   auto GetRightJoinKey(const Tuple &tuple) const -> HashJoinKey {
     HashJoinKey hj_key;
     for (const auto &expr : right_key_expressions_) {
-      hj_key.keys_.push_back(expr->Evaluate(&tuple, GetRightPlan()->OutputSchema()));
+      hj_key.keys_.push_back(
+          expr->Evaluate(&tuple, GetRightPlan()->OutputSchema()));
     }
     return hj_key;
   }
 
   /** @return The left plan node of the hash join */
   auto GetLeftPlan() const -> AbstractPlanNodeRef {
-    BUSTUB_ASSERT(GetChildren().size() == 2, "Hash joins should have exactly two children plans.");
+    BUSTUB_ASSERT(GetChildren().size() == 2,
+                  "Hash joins should have exactly two children plans.");
     return GetChildAt(0);
   }
 
   /** @return The right plan node of the hash join */
   auto GetRightPlan() const -> AbstractPlanNodeRef {
-    BUSTUB_ASSERT(GetChildren().size() == 2, "Hash joins should have exactly two children plans.");
+    BUSTUB_ASSERT(GetChildren().size() == 2,
+                  "Hash joins should have exactly two children plans.");
     return GetChildAt(1);
   }
 
@@ -126,7 +139,8 @@ struct hash<bustub::HashJoinKey> {
     size_t curr_hash = 0;
     for (const auto &key : keys.keys_) {
       if (!key.IsNull()) {
-        curr_hash = bustub::HashUtil::CombineHashes(curr_hash, bustub::HashUtil::HashValue(&key));
+        curr_hash = bustub::HashUtil::CombineHashes(
+            curr_hash, bustub::HashUtil::HashValue(&key));
       }
     }
     return curr_hash;

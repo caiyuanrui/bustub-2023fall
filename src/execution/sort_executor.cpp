@@ -32,9 +32,9 @@ void SortExecutor::Init() {
                 auto v2 = expr->Evaluate(&t2, schema);
 
                 if (v1.CompareLessThan(v2) == CmpBool::CmpTrue) {
-                  return type == OrderByType::ASC ||
-                         type == OrderByType::DEFAULT;
-                } else if (v1.CompareGreaterThan(v2) == CmpBool::CmpTrue) {
+                  return type != OrderByType::DESC;
+                }
+                if (v1.CompareGreaterThan(v2) == CmpBool::CmpTrue) {
                   return type == OrderByType::DESC;
                 }
               }
