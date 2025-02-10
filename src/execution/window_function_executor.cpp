@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <optional>
+#include <tuple>
 #include <vector>
 
 #include "binder/bound_order_by.h"
@@ -13,9 +14,12 @@
 
 namespace bustub {
 
-WindowFunctionExecutor::WindowFunctionExecutor(ExecutorContext *exec_ctx, const WindowFunctionPlanNode *plan,
-                                               std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
+WindowFunctionExecutor::WindowFunctionExecutor(
+    ExecutorContext *exec_ctx, const WindowFunctionPlanNode *plan,
+    std::unique_ptr<AbstractExecutor> &&child_executor)
+    : AbstractExecutor(exec_ctx),
+      plan_(plan),
+      child_executor_(std::move(child_executor)) {}
 
 void WindowFunctionExecutor::Init() {
   child_executor_->Init();
@@ -32,21 +36,23 @@ auto WindowFunctionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       child_tuples.push_back(child_tuple);
     }
 
-    auto compare_tuple = [schema = child_executor_->GetOutputSchema()](
-                             const std::vector<std::pair<OrderByType, AbstractExpressionRef>> &order_bys,
-                             const Tuple &lhs, const Tuple &rhs) {
-      for (const auto &[order, expr] : order_bys) {
-        auto lv = expr->Evaluate(&lhs, schema);
-        auto rv = expr->Evaluate(&rhs, schema);
-        if (lv.CompareLessThan(rv) == CmpBool::CmpTrue) {
-          return order != OrderByType::DESC;
-        }
-        if (lv.CompareGreaterThan(rv) == CmpBool::CmpTrue) {
-          return order == OrderByType::DESC;
-        }
-      }
-      return false;
-    };
+    auto compare_tuple =
+        [schema = child_executor_->GetOutputSchema()](
+            const std::vector<std::pair<OrderByType, AbstractExpressionRef>>
+                &order_bys,
+            const Tuple &lhs, const Tuple &rhs) {
+          for (const auto &[order, expr] : order_bys) {
+            auto lv = expr->Evaluate(&lhs, schema);
+            auto rv = expr->Evaluate(&rhs, schema);
+            if (lv.CompareLessThan(rv) == CmpBool::CmpTrue) {
+              return order != OrderByType::DESC;
+            }
+            if (lv.CompareGreaterThan(rv) == CmpBool::CmpTrue) {
+              return order == OrderByType::DESC;
+            }
+          }
+          return false;
+        };
 
     auto partition_columns = std::unordered_set<uint32_t>();
     for (auto &[column, _] : plan_->window_functions_) {
@@ -54,8 +60,12 @@ auto WindowFunctionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
     }
 
     for (auto &[column, fn] : plan_->window_functions_) {
-      auto global_orders = std::vector<std::pair<OrderByType, AbstractExpressionRef>>();
-      auto partition_orders = std::vector<std::pair<OrderByType, AbstractExpressionRef>>();
+      // partition_bys + order_bys
+      auto global_orders =
+          std::vector<std::pair<OrderByType, AbstractExpressionRef>>();
+      // only partition_bys
+      auto partition_orders =
+          std::vector<std::pair<OrderByType, AbstractExpressionRef>>();
 
       for (const auto &partition_by : fn.partition_by_) {
         global_orders.emplace_back(OrderByType::ASC, partition_by);
@@ -66,82 +76,111 @@ auto WindowFunctionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
         global_orders.push_back(order_by);
       }
 
+      // sort tuples according to partition_bys and order_bys
       std::sort(child_tuples.begin(), child_tuples.end(),
-                [&](const auto &lhs, const auto &rhs) { return compare_tuple(global_orders, lhs, rhs); });
+                [&](const auto &lhs, const auto &rhs) {
+                  return compare_tuple(global_orders, lhs, rhs);
+                });
 
       const auto &group_bys = fn.partition_by_;
       const auto &agg_expr = fn.function_;
       const auto &fn_type = fn.type_;
       const auto &order_bys = fn.order_by_;
+      const auto &plan_schema = plan_->OutputSchema();
 
-      auto make_aggregate_key = [&](const Tuple &tuple) {
+      auto make_aggregate_key = [&group_bys, &plan_schema](const Tuple &tuple) {
         auto key = std::vector<Value>();
         for (const auto &column : group_bys) {
-          key.emplace_back(column->Evaluate(&tuple, plan_->OutputSchema()));
+          key.emplace_back(column->Evaluate(&tuple, plan_schema));
         }
         return AggregateKey{key};
       };
-      auto make_aggregate_value = [&](const Tuple &tuple) {
-        return AggregateValue{{agg_expr->Evaluate(&tuple, plan_->OutputSchema())}};
+      auto make_aggregate_value = [&agg_expr,
+                                   &plan_schema](const Tuple &tuple) {
+        return AggregateValue{{agg_expr->Evaluate(&tuple, plan_schema)}};
       };
-      auto compare_tuple_equals = [&](const Tuple &lhs, const Tuple &rhs) {
-        for (const auto &order_key : order_bys) {
-          return static_cast<bool>(order_key.second->Evaluate(&lhs, plan_->OutputSchema())
-                                       .CompareEquals(order_key.second->Evaluate(&rhs, plan_->OutputSchema())));
+      auto compare_tuple_equals = [&order_bys, &plan_schema](
+                                      const Tuple &lhs,
+                                      const Tuple &rhs) -> bool {
+        for (const auto &[_, expr] : order_bys) {
+          auto v1 = expr->Evaluate(&lhs, plan_schema);
+          auto v2 = expr->Evaluate(&rhs, plan_schema);
+          return v1.CompareEquals(v2) == CmpBool::CmpTrue;
         }
         return false;
       };
-      auto generate_initial_aggregate_value = [&] {
+      auto generate_initial_aggregate_value =
+          [&fn_type]() -> std::tuple<AggregationType, Value> {
         switch (fn_type) {
           case WindowFunctionType::CountStarAggregate:
-            return std::make_tuple(AggregationType::CountStarAggregate, ValueFactory::GetIntegerValue(0));
+            return std::make_tuple(AggregationType::CountStarAggregate,
+                                   ValueFactory::GetIntegerValue(0));
           case WindowFunctionType::CountAggregate:
-            return std::make_tuple(AggregationType::CountAggregate, ValueFactory::GetNullValueByType(TypeId::INTEGER));
+            return std::make_tuple(
+                AggregationType::CountAggregate,
+                ValueFactory::GetNullValueByType(TypeId::INTEGER));
           case WindowFunctionType::SumAggregate:
-            return std::make_tuple(AggregationType::SumAggregate, ValueFactory::GetNullValueByType(TypeId::INTEGER));
+            return std::make_tuple(
+                AggregationType::SumAggregate,
+                ValueFactory::GetNullValueByType(TypeId::INTEGER));
           case WindowFunctionType::MinAggregate:
-            return std::make_tuple(AggregationType::MinAggregate, ValueFactory::GetNullValueByType(TypeId::INTEGER));
+            return std::make_tuple(
+                AggregationType::MinAggregate,
+                ValueFactory::GetNullValueByType(TypeId::INTEGER));
           case WindowFunctionType::MaxAggregate:
-            return std::make_tuple(AggregationType::MaxAggregate, ValueFactory::GetNullValueByType(TypeId::INTEGER));
+            return std::make_tuple(
+                AggregationType::MaxAggregate,
+                ValueFactory::GetNullValueByType(TypeId::INTEGER));
           case WindowFunctionType::Rank:
-            return std::make_tuple(AggregationType::CountAggregate, ValueFactory::GetNullValueByType(TypeId::INTEGER));
+            return std::make_tuple(
+                AggregationType::CountAggregate,
+                ValueFactory::GetNullValueByType(TypeId::INTEGER));
         }
         UNREACHABLE("Unknown window function type");
       };
-      auto produce_tuple = [&](size_t i, const std::vector<Value> &values) {
+      auto produce_tuple = [this, &plan_schema](
+                               size_t i, const std::vector<Value> &values) {
         if (i < tuples_.size()) {
-          tuples_[i] = Tuple(values, &plan_->OutputSchema());
+          tuples_[i] = Tuple(values, &plan_schema);
         } else {
-          tuples_.emplace_back(values, &plan_->OutputSchema());
+          tuples_.emplace_back(values, &plan_schema);
         }
       };
 
       auto [agg_type, default_value] = generate_initial_aggregate_value();
       const auto agg_exprs = std::vector<AbstractExpressionRef>{agg_expr};
       const auto agg_types = std::vector<AggregationType>{agg_type};
-      auto generate_partition_value = [&, &default_value = default_value](std::vector<Value> &values, size_t i,
-                                                                          uint32_t column) {
+      auto generate_partition_value = [&, &default_value = default_value](
+                                          std::vector<Value> &values, size_t i,
+                                          uint32_t column) {
         if (partition_columns.count(column) == 0) {
-          values.emplace_back(plan_->columns_[column]->Evaluate(&child_tuples[i], child_executor_->GetOutputSchema()));
+          values.emplace_back(plan_->columns_[column]->Evaluate(
+              &child_tuples[i], child_executor_->GetOutputSchema()));
         } else if (i < tuples_.size()) {
-          values.emplace_back(tuples_[i].GetValue(&plan_->OutputSchema(), column));
+          values.emplace_back(
+              tuples_[i].GetValue(&plan_->OutputSchema(), column));
         } else {
           values.emplace_back(default_value);
         }
       };
-      auto aggregate_partition = [&, &current_column = column](size_t lower_bound, size_t upper_bound) {
+      auto aggregate_partition = [&, &current_column = column](
+                                     size_t lower_bound, size_t upper_bound) {
         if (fn_type == WindowFunctionType::Rank) {
           size_t global_rank = 0;
           size_t partition_rank = 0;
           for (auto i = lower_bound; i != upper_bound; ++i) {
             auto values = std::vector<Value>();
-            for (auto column = 0U; column < plan_->OutputSchema().GetColumnCount(); column++) {
+            for (auto column = 0U;
+                 column < plan_->OutputSchema().GetColumnCount(); column++) {
               if (column == current_column) {
                 ++global_rank;
-                if (partition_rank == 0 || !compare_tuple_equals(child_tuples[i], child_tuples[i - 1])) {
+                if (partition_rank == 0 ||
+                    !compare_tuple_equals(child_tuples[i],
+                                          child_tuples[i - 1])) {
                   partition_rank = global_rank;
                 }
-                values.emplace_back(ValueFactory::GetIntegerValue(partition_rank));
+                values.emplace_back(
+                    ValueFactory::GetIntegerValue(partition_rank));
               } else {
                 generate_partition_value(values, i, column);
               }
@@ -170,7 +209,8 @@ auto WindowFunctionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
           }
 
           auto values = std::vector<Value>();
-          for (auto column = 0U; column < plan_->OutputSchema().GetColumnCount(); column++) {
+          for (auto column = 0U;
+               column < plan_->OutputSchema().GetColumnCount(); column++) {
             if (column == current_column) {
               values.emplace_back(aht.Begin().Val().aggregates_.begin()[0]);
             } else {
@@ -185,9 +225,12 @@ auto WindowFunctionExecutor::Next(Tuple *tuple, RID *rid) -> bool {
       for (auto i = 0U; i < child_tuples.size();) {
         auto upper_bound = std::upper_bound(
             child_tuples.begin(), child_tuples.end(), child_tuples[i],
-            [&](const auto &lhs, const auto &rhs) { return compare_tuple(partition_orders, lhs, rhs); });
+            [&](const auto &lhs, const auto &rhs) {
+              return compare_tuple(partition_orders, lhs, rhs);
+            });
 
-        aggregate_partition(i, std::distance(child_tuples.begin(), upper_bound));
+        aggregate_partition(i,
+                            std::distance(child_tuples.begin(), upper_bound));
         i = std::distance(child_tuples.begin(), upper_bound);
       }
     }

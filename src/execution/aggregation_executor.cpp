@@ -22,9 +22,8 @@
 
 namespace bustub {
 
-AggregationExecutor::AggregationExecutor(
-    ExecutorContext *exec_ctx, const AggregationPlanNode *plan,
-    std::unique_ptr<AbstractExecutor> &&child_executor)
+AggregationExecutor::AggregationExecutor(ExecutorContext *exec_ctx, const AggregationPlanNode *plan,
+                                         std::unique_ptr<AbstractExecutor> &&child_executor)
     : AbstractExecutor(exec_ctx),
       plan_(plan),
       child_executor_(std::move(child_executor)),
@@ -89,9 +88,7 @@ auto AggregationExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   return true;
 }
 
-auto AggregationExecutor::GetChildExecutor() const -> const AbstractExecutor * {
-  return child_executor_.get();
-}
+auto AggregationExecutor::GetChildExecutor() const -> const AbstractExecutor * { return child_executor_.get(); }
 
 auto AggregationExecutor::GenerateInitialTuple() -> Tuple {
   std::vector<Value> vals;

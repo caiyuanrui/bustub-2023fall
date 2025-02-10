@@ -35,8 +35,7 @@ class TopNExecutor : public AbstractExecutor {
    * @param exec_ctx The executor context
    * @param plan The TopN plan to be executed
    */
-  TopNExecutor(ExecutorContext *exec_ctx, const TopNPlanNode *plan,
-               std::unique_ptr<AbstractExecutor> &&child_executor);
+  TopNExecutor(ExecutorContext *exec_ctx, const TopNPlanNode *plan, std::unique_ptr<AbstractExecutor> &&child_executor);
 
   /** Initialize the TopN */
   void Init() override;
@@ -50,9 +49,7 @@ class TopNExecutor : public AbstractExecutor {
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
   /** @return The output schema for the TopN */
-  auto GetOutputSchema() const -> const Schema & override {
-    return plan_->OutputSchema();
-  }
+  auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
 
   /** Sets new child executor (for testing only) */
   void SetChildExecutor(std::unique_ptr<AbstractExecutor> &&child_executor) {

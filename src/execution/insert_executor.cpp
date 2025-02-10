@@ -21,12 +21,9 @@
 
 namespace bustub {
 
-InsertExecutor::InsertExecutor(
-    ExecutorContext *exec_ctx, const InsertPlanNode *plan,
-    std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx),
-      plan_(plan),
-      child_executor_(std::move(child_executor)) {}
+InsertExecutor::InsertExecutor(ExecutorContext *exec_ctx, const InsertPlanNode *plan,
+                               std::unique_ptr<AbstractExecutor> &&child_executor)
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
 void InsertExecutor::Init() {
   this->has_called_ = false;
@@ -39,29 +36,23 @@ auto InsertExecutor::Next(Tuple *tuple, RID *rid) -> bool {
   }
 
   this->has_called_ = true;
-  auto table_info =
-      this->exec_ctx_->GetCatalog()->GetTable(this->plan_->GetTableOid());
+  auto table_info = this->exec_ctx_->GetCatalog()->GetTable(this->plan_->GetTableOid());
 
   int tuples_inserted = 0;
 
   Tuple tuple_temp;
   RID rid_temp;
   while (child_executor_->Next(&tuple_temp, &rid_temp)) {
-    auto rid = table_info->table_->InsertTuple(
-        TupleMeta{0, false}, tuple_temp, this->exec_ctx_->GetLockManager(),
-        this->exec_ctx_->GetTransaction(), this->plan_->GetTableOid());
+    auto rid = table_info->table_->InsertTuple(TupleMeta{0, false}, tuple_temp, this->exec_ctx_->GetLockManager(),
+                                               this->exec_ctx_->GetTransaction(), this->plan_->GetTableOid());
     if (rid == std::nullopt) {
       throw bustub::Exception("InsertExecutor: Page overflow");
     }
 
     rid_temp = *rid;
-    for (auto index :
-         this->exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_)) {
-      auto key =
-          tuple_temp.KeyFromTuple(table_info->schema_, index->key_schema_,
-                                  index->index_->GetKeyAttrs());
-      if (!index->index_->InsertEntry(key, rid_temp,
-                                      this->exec_ctx_->GetTransaction())) {
+    for (auto index : this->exec_ctx_->GetCatalog()->GetTableIndexes(table_info->name_)) {
+      auto key = tuple_temp.KeyFromTuple(table_info->schema_, index->key_schema_, index->index_->GetKeyAttrs());
+      if (!index->index_->InsertEntry(key, rid_temp, this->exec_ctx_->GetTransaction())) {
         throw bustub::Exception("InsertExecutor: Failed to update index");
       }
     }

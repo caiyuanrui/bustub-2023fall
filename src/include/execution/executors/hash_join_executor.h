@@ -19,10 +19,49 @@
 #include <utility>
 #include <vector>
 
+#include "common/util/hash_util.h"
 #include "execution/executor_context.h"
 #include "execution/executors/abstract_executor.h"
 #include "execution/plans/hash_join_plan.h"
 #include "storage/table/tuple.h"
+
+namespace bustub {
+
+struct HashJoinKey {
+  std::vector<Value> keys_;
+
+  auto operator==(const HashJoinKey &other) const -> bool {
+    if (keys_.size() != other.keys_.size()) {
+      return false;
+    }
+    for (uint32_t i = 0; i < other.keys_.size(); i++) {
+      if (keys_[i].CompareEquals(other.keys_[i]) != CmpBool::CmpTrue) {
+        return false;
+      }
+    }
+    return true;
+  }
+};
+
+struct HashJoinValue {
+  std::vector<Tuple> tuples_;
+};
+}  // namespace bustub
+
+namespace std {
+template <>
+struct hash<bustub::HashJoinKey> {
+  auto operator()(const bustub::HashJoinKey &keys) const -> std::size_t {
+    size_t curr_hash = 0;
+    for (const auto &key : keys.keys_) {
+      if (!key.IsNull()) {
+        curr_hash = bustub::HashUtil::CombineHashes(curr_hash, bustub::HashUtil::HashValue(&key));
+      }
+    }
+    return curr_hash;
+  }
+};
+}  // namespace std
 
 namespace bustub {
 
@@ -31,8 +70,7 @@ class SimpleHashJoinHashTable {
   SimpleHashJoinHashTable() = default;
   ~SimpleHashJoinHashTable() = default;
 
-  auto Get(const HashJoinKey &key) const
-      -> std::optional<std::reference_wrapper<const HashJoinValue>> {
+  auto Get(const HashJoinKey &key) const -> std::optional<std::reference_wrapper<const HashJoinValue>> {
     auto it = ht_.find(key);
     if (it == ht_.end()) {
       return std::nullopt;
@@ -40,18 +78,14 @@ class SimpleHashJoinHashTable {
     return std::cref(it->second);
   }
 
-  void Insert(const HashJoinKey &value, const Tuple &tuple) {
-    ht_[value].tuples_.push_back(tuple);
-  }
+  void Insert(const HashJoinKey &value, const Tuple &tuple) { ht_[value].tuples_.push_back(tuple); }
   auto Empty() -> bool { return ht_.empty(); }
 
   void Clear() { ht_.clear(); }
 
   class Iterator {
    public:
-    explicit Iterator(
-        std::unordered_map<HashJoinKey, HashJoinValue>::const_iterator iter)
-        : iter_{iter} {}
+    explicit Iterator(std::unordered_map<HashJoinKey, HashJoinValue>::const_iterator iter) : iter_{iter} {}
 
     auto Key() -> const HashJoinKey & { return iter_->first; }
     auto Val() -> const HashJoinValue & { return iter_->second; }
@@ -61,12 +95,8 @@ class SimpleHashJoinHashTable {
       return *this;
     }
 
-    auto operator==(const Iterator &other) -> bool {
-      return this->iter_ == other.iter_;
-    }
-    auto operator!=(const Iterator &other) -> bool {
-      return this->iter_ != other.iter_;
-    }
+    auto operator==(const Iterator &other) -> bool { return this->iter_ == other.iter_; }
+    auto operator!=(const Iterator &other) -> bool { return this->iter_ != other.iter_; }
 
    private:
     std::unordered_map<HashJoinKey, HashJoinValue>::const_iterator iter_;
@@ -94,8 +124,7 @@ class HashJoinExecutor : public AbstractExecutor {
    * side of join
    */
   HashJoinExecutor(ExecutorContext *exec_ctx, const HashJoinPlanNode *plan,
-                   std::unique_ptr<AbstractExecutor> &&left_child,
-                   std::unique_ptr<AbstractExecutor> &&right_child);
+                   std::unique_ptr<AbstractExecutor> &&left_child, std::unique_ptr<AbstractExecutor> &&right_child);
 
   /** Initialize the join */
   void Init() override;
@@ -113,15 +142,30 @@ class HashJoinExecutor : public AbstractExecutor {
   auto LeftNext(Tuple *tuple, RID *rid [[maybe_unused]]) -> bool;
 
   /** @return The output schema for the join */
-  auto GetOutputSchema() const -> const Schema & override {
-    return plan_->OutputSchema();
-  };
+  auto GetOutputSchema() const -> const Schema & override;
 
  private:
+  static auto GetLeftJoinKey(const Tuple &tuple, const Schema &left_plan_scheme,
+                             const std::vector<AbstractExpressionRef> &left_key_expressions_) -> HashJoinKey {
+    HashJoinKey hj_key;
+    for (const auto &expr : left_key_expressions_) {
+      hj_key.keys_.push_back(expr->Evaluate(&tuple, left_plan_scheme));
+    }
+    return hj_key;
+  }
+
+  static auto GetRightJoinKey(const Tuple &tuple, const Schema &right_plan_scheme,
+                              const std::vector<AbstractExpressionRef> &right_key_expressions_) -> HashJoinKey {
+    HashJoinKey hj_key;
+    for (const auto &expr : right_key_expressions_) {
+      hj_key.keys_.push_back(expr->Evaluate(&tuple, right_plan_scheme));
+    }
+    return hj_key;
+  }
+
   class Iterator {
    public:
-    Iterator(const HashJoinPlanNode *plan, AbstractExecutor *left,
-             const SimpleHashJoinHashTable *ht)
+    Iterator(const HashJoinPlanNode *plan, AbstractExecutor *left, const SimpleHashJoinHashTable *ht)
         : plan_(plan), left_executor_(left), ht_(ht) {}
 
     auto Init() {
@@ -130,7 +174,8 @@ class HashJoinExecutor : public AbstractExecutor {
       left_executor_->Init();
 
       if (left_executor_->Next(&probe_tuple_, &probe_rid_)) {
-        right_match_tuples_ = ht_->Get(plan_->GetLeftJoinKey(probe_tuple_));
+        right_match_tuples_ =
+            ht_->Get(GetLeftJoinKey(probe_tuple_, plan_->OutputSchema(), plan_->LeftJoinKeyExpressions()));
         if (right_match_tuples_.has_value()) {
           right_match_iter_ = right_match_tuples_.value().get().tuples_.begin();
         }
@@ -151,8 +196,7 @@ class HashJoinExecutor : public AbstractExecutor {
           end_ = true;
           return;
         }
-
-        const auto &key = plan_->GetLeftJoinKey(probe_tuple_);
+        const auto key = GetLeftJoinKey(probe_tuple_, plan_->OutputSchema(), plan_->LeftJoinKeyExpressions());
         right_match_tuples_ = ht_->Get(key);
 
         if (right_match_tuples_.has_value()) {
@@ -173,8 +217,7 @@ class HashJoinExecutor : public AbstractExecutor {
 
       right_match_iter_++;
 
-      if (right_match_iter_ ==
-          right_match_tuples_.value().get().tuples_.end()) {
+      if (right_match_iter_ == right_match_tuples_.value().get().tuples_.end()) {
         // LOG_DEBUG("Right tuples are run out");
         fetch_next_probe();
         return true;
@@ -185,9 +228,7 @@ class HashJoinExecutor : public AbstractExecutor {
     }
 
     auto Current() -> std::pair<const Tuple, std::optional<const Tuple>> {
-      return {probe_tuple_, right_match_tuples_.has_value()
-                                ? std::make_optional(*right_match_iter_)
-                                : std::nullopt};
+      return {probe_tuple_, right_match_tuples_.has_value() ? std::make_optional(*right_match_iter_) : std::nullopt};
     }
 
    private:
@@ -198,8 +239,7 @@ class HashJoinExecutor : public AbstractExecutor {
     Tuple probe_tuple_;
     RID probe_rid_;
 
-    std::optional<std::reference_wrapper<const HashJoinValue>>
-        right_match_tuples_ = std::nullopt;
+    std::optional<std::reference_wrapper<const HashJoinValue>> right_match_tuples_ = std::nullopt;
     std::vector<Tuple>::const_iterator right_match_iter_;
     bool end_ = false;
   };
@@ -207,8 +247,7 @@ class HashJoinExecutor : public AbstractExecutor {
   /** The HashJoin plan node to be executed. */
   const HashJoinPlanNode *plan_;
   std::unique_ptr<AbstractExecutor> left_child_, right_child_;
-  std::unique_ptr<SimpleHashJoinHashTable> ht_ =
-      std::make_unique<SimpleHashJoinHashTable>();
+  std::unique_ptr<SimpleHashJoinHashTable> ht_ = std::make_unique<SimpleHashJoinHashTable>();
 
   /** Iterator used to tranverse the joined tuple. Don't skip null value */
   Iterator iter_;

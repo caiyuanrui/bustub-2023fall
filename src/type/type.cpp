@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <string>
+
 #include "common/exception.h"
 #include "type/bigint_type.h"
 #include "type/boolean_type.h"
@@ -168,30 +169,6 @@ auto Type::GetMaxValue(TypeId type_id) -> Value {
       break;
   }
   throw Exception(ExceptionType::MISMATCH_TYPE, "Cannot get max value.");
-}
-
-auto Type::GenerateNullValue(TypeId type_id) -> Value {
-  switch (type_id) {
-    case INVALID:
-      throw NotImplementedException("INVALID's NULL value is not implemented.");
-    case BOOLEAN:
-      return {type_id, BUSTUB_BOOLEAN_NULL};
-    case TINYINT:
-      return {type_id, BUSTUB_INT8_NULL};
-    case SMALLINT:
-      return {type_id, BUSTUB_INT16_NULL};
-    case INTEGER:
-      return {type_id, BUSTUB_INT32_NULL};
-    case BIGINT:
-      return {type_id, BUSTUB_INT64_NULL};
-    case DECIMAL:
-      return {type_id, BUSTUB_DECIMAL_NULL};
-    case VARCHAR:
-      throw NotImplementedException("VARCHAR's NULL value is not implemented.");
-      return {type_id, nullptr, 0, false};
-    case TIMESTAMP:
-      return {type_id, BUSTUB_TIMESTAMP_NULL};
-  }
 }
 
 auto Type::CompareEquals(const Value &left __attribute__((unused)), const Value &right __attribute__((unused))) const

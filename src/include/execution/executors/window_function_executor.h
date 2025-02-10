@@ -74,7 +74,8 @@ class WindowFunctionExecutor : public AbstractExecutor {
    * @param exec_ctx The executor context
    * @param plan The window aggregation plan to be executed
    */
-  WindowFunctionExecutor(ExecutorContext *exec_ctx, const WindowFunctionPlanNode *plan,
+  WindowFunctionExecutor(ExecutorContext *exec_ctx,
+                         const WindowFunctionPlanNode *plan,
                          std::unique_ptr<AbstractExecutor> &&child_executor);
 
   /** Initialize the window aggregation */
@@ -89,7 +90,9 @@ class WindowFunctionExecutor : public AbstractExecutor {
   auto Next(Tuple *tuple, RID *rid) -> bool override;
 
   /** @return The output schema for the window aggregation plan */
-  auto GetOutputSchema() const -> const Schema & override { return plan_->OutputSchema(); }
+  auto GetOutputSchema() const -> const Schema & override {
+    return plan_->OutputSchema();
+  }
 
  private:
   /** The window aggregation plan node to be executed */

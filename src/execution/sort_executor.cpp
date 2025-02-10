@@ -9,9 +9,7 @@ namespace bustub {
 
 SortExecutor::SortExecutor(ExecutorContext *exec_ctx, const SortPlanNode *plan,
                            std::unique_ptr<AbstractExecutor> &&child_executor)
-    : AbstractExecutor(exec_ctx),
-      plan_(plan),
-      child_executor_(std::move(child_executor)) {}
+    : AbstractExecutor(exec_ctx), plan_(plan), child_executor_(std::move(child_executor)) {}
 
 void SortExecutor::Init() {
   /** Read all tuples into memory */
@@ -24,9 +22,8 @@ void SortExecutor::Init() {
   }
 
   std::sort(tuples_.begin(), tuples_.end(),
-            [order_bys = plan_->GetOrderBy(),
-             schema = child_executor_->GetOutputSchema()](
-                const Tuple &t1, const Tuple &t2) -> bool {
+            [order_bys = plan_->GetOrderBy(), schema = child_executor_->GetOutputSchema()](const Tuple &t1,
+                                                                                           const Tuple &t2) -> bool {
               for (const auto &[type, expr] : order_bys) {
                 auto v1 = expr->Evaluate(&t1, schema);
                 auto v2 = expr->Evaluate(&t2, schema);

@@ -11,14 +11,11 @@ TopNExecutor::TopNExecutor(ExecutorContext *exec_ctx, const TopNPlanNode *plan,
     : AbstractExecutor(exec_ctx),
       plan_(plan),
       child_executor_(std::move(child_executor)),
-      cmp_([this](const Tuple &t1, const Tuple &t2) {
-        return Compare(t1, t2);
-      }) {}
+      cmp_([this](const Tuple &t1, const Tuple &t2) { return Compare(t1, t2); }) {}
 
 void TopNExecutor::Init() {
   child_executor_->Init();
-  auto heap =
-      std::priority_queue<Tuple, std::vector<Tuple>, decltype(cmp_)>(cmp_);
+  auto heap = std::priority_queue<Tuple, std::vector<Tuple>, decltype(cmp_)>(cmp_);
 
   Tuple tuple;
   RID rid;

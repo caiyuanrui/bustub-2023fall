@@ -10,10 +10,11 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "execution/executors/hash_join_executor.h"
 #include <memory>
 #include <vector>
+
 #include "common/exception.h"
+#include "execution/executors/hash_join_executor.h"
 #include "execution/plans/hash_join_plan.h"
 #include "fmt/core.h"
 #include "storage/table/tuple.h"
@@ -44,7 +45,8 @@ void HashJoinExecutor::Init() {
   right_child_->Init();
 
   while (right_child_->Next(&tuple, &rid)) {
-    auto key = plan_->GetRightJoinKey(tuple);
+    auto key = GetRightJoinKey(tuple, plan_->OutputSchema(), plan_->RightJoinKeyExpressions());
+    // auto key = plan_->GetRightJoinKey(tuple);
     ht_->Insert(key, tuple);
   }
 
@@ -91,6 +93,29 @@ auto HashJoinExecutor::InnerNext(Tuple *tuple, RID *rid [[maybe_unused]]) -> boo
 }
 
 auto HashJoinExecutor::LeftNext(Tuple *tuple, RID *rid [[maybe_unused]]) -> bool {
+  const auto generate_null_value = [](TypeId type_id) -> Value {
+    switch (type_id) {
+      case INVALID:
+        throw NotImplementedException("INVALID's NULL value is not implemented.");
+      case BOOLEAN:
+        return {type_id, BUSTUB_BOOLEAN_NULL};
+      case TINYINT:
+        return {type_id, BUSTUB_INT8_NULL};
+      case SMALLINT:
+        return {type_id, BUSTUB_INT16_NULL};
+      case INTEGER:
+        return {type_id, BUSTUB_INT32_NULL};
+      case BIGINT:
+        return {type_id, BUSTUB_INT64_NULL};
+      case DECIMAL:
+        return {type_id, BUSTUB_DECIMAL_NULL};
+      case VARCHAR:
+        throw NotImplementedException("VARCHAR's NULL value is not implemented.");
+        return {type_id, nullptr, 0, false};
+      case TIMESTAMP:
+        return {type_id, BUSTUB_TIMESTAMP_NULL};
+    }
+  };
   if (!iter_.End()) {
     const auto [probe, right] = iter_.Current();
     iter_.Advance();
@@ -107,7 +132,7 @@ auto HashJoinExecutor::LeftNext(Tuple *tuple, RID *rid [[maybe_unused]]) -> bool
       }
     } else {
       for (const auto &column : plan_->GetRightPlan()->OutputSchema().GetColumns()) {
-        values.push_back(Type::GenerateNullValue(column.GetType()));
+        values.push_back(generate_null_value(column.GetType()));
       }
     }
 
@@ -116,5 +141,7 @@ auto HashJoinExecutor::LeftNext(Tuple *tuple, RID *rid [[maybe_unused]]) -> bool
   }
   return false;
 }
+
+auto HashJoinExecutor::GetOutputSchema() const -> const Schema & { return plan_->OutputSchema(); };
 
 }  // namespace bustub
